@@ -19,8 +19,7 @@ public:
     int X;
 public:
     Deferred(int x)
-        : X(x) {
-    }
+        : X(x) {}
     ~Deferred() = default;
 };
 
@@ -174,16 +173,16 @@ NANO_TEST_CASE("Events")
     Nano::Events::EventDispatcher<MyEvent> dispatcher;
 
     dispatcher.Subscribe([](MyEvent& e)
-        {
-            Nano::Events::EventHandler<MyEvent> handler(e);
-            handler.Handle<int>([](int& i) { NANO_TEST_EQUALS(i++, 14); });
-        });
+    {
+        Nano::Events::EventHandler<MyEvent> handler(e);
+        handler.Handle<int>([](int& i) { NANO_TEST_EQUALS(i++, 14); });
+    });
     dispatcher.Subscribe([](MyEvent& e)
-        {
-            Nano::Events::EventHandler<MyEvent> handler(e);
-            handler.Handle<int>([](int& i) { NANO_TEST_EQUALS(i, 15); });
-            handler.Handle<unsigned int>([](unsigned int& i) { NANO_TEST_EQUALS(i, 16u); });
-        });
+    {
+        Nano::Events::EventHandler<MyEvent> handler(e);
+        handler.Handle<int>([](int& i) { NANO_TEST_EQUALS(i, 15); });
+        handler.Handle<unsigned int>([](unsigned int& i) { NANO_TEST_EQUALS(i, 16u); });
+    });
 
     MyEvent e(14);
     dispatcher.Dispatch(e);
@@ -199,9 +198,15 @@ NANO_TEST_CASE("ECS")
 
     {
         uint64_t id0 = 0;
+        uint64_t id1 = 1;
+        uint64_t id2 = 70;
         registry.AddComponent<int>(id0, 69);
+        registry.AddComponent<int>(id1, 9);
+        registry.AddComponent<int>(id2, 732890);
+        registry.AddComponent<unsigned int>(id1, 10);
         NANO_TEST_BOOL(registry.HasComponent<int>(id0));
         NANO_TEST_BOOL(!registry.HasComponent<unsigned int>(id0));
+        NANO_TEST_BOOL(registry.HasComponent<unsigned int>(id1));
         NANO_TEST_BOOL(!registry.HasComponent<float>(id0));
 
         auto& i = registry.GetComponent<int>(id0);
@@ -293,6 +298,16 @@ NANO_BENCHMARK_INIT("FastRandom")
             (void)Nano::FastRandom::Double();
     };
 }
+
+// ECS
+NANO_BENCHMARK_INIT("ECS")
+{
+    NANO_BENCHMARK_AUTO("View")
+    {
+        // TODO: ...
+    };
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////////
 // Main

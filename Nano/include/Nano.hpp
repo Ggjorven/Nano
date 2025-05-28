@@ -665,7 +665,7 @@ namespace Nano
         inline T& Get(ID id) { NANO_ASSERT(Has(id), "No value present by this ID."); return m_Values[m_Sparse[id]]; }
         inline const T& Get(ID id) const { NANO_ASSERT(Has(id), "No value present by this ID."); return m_Values[m_Sparse[id]]; }
 
-        inline size_t Size() const { return m_Values.size(); }
+        inline size_t Size() const { return m_IDs.size(); }
         inline std::vector<ID>& GetIDs() { return m_IDs; }
         inline const std::vector<ID>& GetIDs() const { return m_IDs; }
         inline std::vector<T>& GetValues() { return m_Values; }
@@ -2083,56 +2083,194 @@ namespace Nano::Internal::ECS
 
         // Methods // TODO: Add requires InTuple
         template<typename TComponent>
-        void AddComponent(ID id, const TComponent& component) requires(std::is_copy_constructible_v<TComponent>)
+        void AddComponent(ID id, const TComponent& component) requires(Nano::Types::TupleContains<TComponent, TypesTuple> && std::is_copy_constructible_v<TComponent>)
         {
             std::get<SparseSet<TComponent, ID>>(m_Components).Add(id, component);
         }
 
         template<typename TComponent>
-        void AddComponent(ID id, TComponent&& component) requires(std::is_move_constructible_v<TComponent>)
+        void AddComponent(ID id, TComponent&& component) requires(Nano::Types::TupleContains<TComponent, TypesTuple>&& std::is_move_constructible_v<TComponent>)
         {
             std::get<SparseSet<TComponent, ID>>(m_Components).Add(id, std::move(component));
         }
 
         template<typename TComponent, typename ...TArgs>
-        void AddComponent(ID id, TArgs&& ...args) requires(std::is_constructible_v<TComponent, TArgs...>)
+        void AddComponent(ID id, TArgs&& ...args) requires(Nano::Types::TupleContains<TComponent, TypesTuple>&& std::is_constructible_v<TComponent, TArgs...>)
         {
             std::get<SparseSet<TComponent, ID>>(m_Components).Add(id, std::forward<TArgs>(args)...);
         }
 
         template<typename TComponent>
-        void RemoveComponent(ID id)
+        void RemoveComponent(ID id) requires(Nano::Types::TupleContains<TComponent, TypesTuple>)
         {
             std::get<SparseSet<TComponent, ID>>(m_Components).Remove(id);
         }
 
         // Getters
         template<typename TComponent>
-        bool HasComponent(ID id) const
+        bool HasComponent(ID id) const requires(Nano::Types::TupleContains<TComponent, TypesTuple>)
         {
             return std::get<SparseSet<TComponent, ID>>(m_Components).Has(id);
         }
 
         template<typename TComponent>
-        TComponent& GetComponent(ID id)
+        TComponent& GetComponent(ID id) requires(Nano::Types::TupleContains<TComponent, TypesTuple>)
         {
             return std::get<SparseSet<TComponent, ID>>(m_Components).Get(id);
         }
 
         template<typename TComponent>
-        const TComponent& GetComponent(ID id) const
+        const TComponent& GetComponent(ID id) const requires(Nano::Types::TupleContains<TComponent, TypesTuple>)
         {
             return std::get<SparseSet<TComponent, ID>>(m_Components).Get(id);
         }
 
         // Internal
         template<typename TComponent>
-        inline SparseSet<TComponent, ID>& GetSparseSet() { return std::get<SparseSet<TComponent, ID>>(); }
+        inline SparseSet<TComponent, ID>& GetSparseSet() requires(Nano::Types::TupleContains<TComponent, TypesTuple>) { return std::get<SparseSet<TComponent, ID>>(m_Components); }
         template<typename TComponent>
-        inline const SparseSet<TComponent, ID>& GetSparseSet() const { return std::get<SparseSet<TComponent, ID>>(); }
+        inline const SparseSet<TComponent, ID>& GetSparseSet() const requires(Nano::Types::TupleContains<TComponent, TypesTuple>) { return std::get<SparseSet<TComponent, ID>>(m_Components); }
 
     private:
         StorageTuple m_Components;
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // ComponentView
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename ID, typename ...Components>
+    class ComponentView
+    {
+    public:
+        using SparseSetsTuple = std::tuple<std::add_lvalue_reference_t<SparseSet<Components, ID>>...>;
+    public:
+        ////////////////////////////////////////////////////////////////////////////////////
+        // TypeIterator
+        ////////////////////////////////////////////////////////////////////////////////////
+        struct TypeIterator
+        {
+        public:
+            // Constructor & Destructor
+            inline TypeIterator(const ID* beginID, const ID* endID, const SparseSetsTuple& sets)
+                : m_Current(beginID), m_End(endID), m_Sets(sets)
+            {
+                Satisfy();
+            }
+            ~TypeIterator() = default;
+
+            // Methods
+            void Satisfy()
+            {
+                while (m_Current != m_End) 
+                {
+                    ID id = *m_Current;
+
+                    if ((std::get<SparseSet<Components, ID>&>(m_Sets).Has(id) && ...))
+                        break;
+
+                    ++m_Current;
+                }
+            }
+
+            // Operators
+            inline bool operator == (const TypeIterator& other) const { return m_Current == other.m_Current; }
+            
+            auto operator * () const 
+            { 
+                ID id = *m_Current;
+                return std::tuple<ID, std::add_lvalue_reference_t<Components>...>{ id, std::get<SparseSet<Components, ID>&>(m_Sets).Get(id)... };
+            }
+            TypeIterator& operator ++ ()
+            {
+                ++m_Current;
+                Satisfy();
+                return *this;
+            }
+
+        private:
+            const ID* m_Current;
+            const ID* m_End;
+            const SparseSetsTuple& m_Sets;
+        };
+
+        ////////////////////////////////////////////////////////////////////////////////////
+        // IndexIterator
+        ////////////////////////////////////////////////////////////////////////////////////
+        struct IndexIterator
+        {
+        public:
+            using PtrTuple = std::tuple<std::add_pointer_t<SparseSet<Components, ID>>...>;
+        public:
+            // Constructor & Destructor
+            IndexIterator(const ID* beginID, const ID* endID, const SparseSetsTuple& sets)
+                : m_Current(beginID), m_End(endID)
+            {
+                m_Ptrs = std::apply([](auto&... ss) { return PtrTuple{ &ss... }; }, sets);
+                Satisfy();
+            }
+            ~IndexIterator() = default;
+
+            // Methods
+            void Satisfy()
+            {
+                while (m_Current != m_End)
+                {
+                    ID id = *m_Current;
+                    if (SatisfyImpl(id, std::index_sequence_for<Components...>{}))
+                        break;
+                    ++m_Current;
+                }
+            }
+
+            // Operators
+            IndexIterator& operator++()
+            {
+                ++m_Current;
+                Satisfy();
+                return *this;
+            }
+
+            inline auto operator * () const { return DerefImpl(std::index_sequence_for<Components...>{}); }
+            inline bool operator == (const IndexIterator& other) const { return m_Current == other.m_Current; }
+            inline bool operator != (const IndexIterator& other) const { return !(*this == other); }
+
+        private:
+            // Private methods
+            template<size_t... Is>
+            bool SatisfyImpl(ID id, std::index_sequence<Is...>) const 
+            {
+                return (std::get<Is>(m_Ptrs)->Has(id) && ...);
+            }
+
+            template<size_t... Is>
+            auto DerefImpl(std::index_sequence<Is...>) const 
+            {
+                ID id = *m_Current;
+                return std::tuple<ID, Components&...>{ id, std::get<Is>(m_Ptrs)->Get(id)... };
+            }
+
+        private:
+            const ID* m_Current;
+            const ID* m_End;
+            PtrTuple m_Ptrs; 
+        };
+
+        // Iterator
+        using Iterator = IndexIterator;
+
+    public:
+        // Constructor & Destructor
+        inline ComponentView(std::span<const ID> id, SparseSetsTuple&& sets)
+            : m_IDs(id), m_Sets(std::move(sets)) {}
+        ~ComponentView() = default;
+
+        // Iterators
+        inline Iterator begin() const { return Iterator(m_IDs.data(), m_IDs.data() + m_IDs.size(), m_Sets); }
+        inline Iterator end() const { return Iterator(m_IDs.data() + m_IDs.size(), m_IDs.data() + m_IDs.size(), m_Sets); }
+
+    private:
+        std::span<const ID> m_IDs;
+        SparseSetsTuple m_Sets;
     };
 
 }
@@ -2147,56 +2285,65 @@ namespace Nano::ECS
     class Registry // Note: We have to predefine the components to avoid the V-table
     {
     public:
+        using TypesTuple = std::tuple<Components...>;
+    public:
         // Constructor & Destructor
         Registry() = default;
         ~Registry() = default;
 
         // Methods
         template<typename TComponent>
-        void AddComponent(ID id, const TComponent& component) requires(std::is_copy_constructible_v<TComponent>) { m_Storage.AddComponent<TComponent>(id, component); }
+        void AddComponent(ID id, const TComponent& component) requires(Nano::Types::TupleContains<TComponent, TypesTuple> && std::is_copy_constructible_v<TComponent>) { m_Storage.AddComponent<TComponent>(id, component); }
         template<typename TComponent>
-        void AddComponent(ID id, TComponent&& component) requires(std::is_move_constructible_v<TComponent>) { m_Storage.AddComponent<TComponent>(id, std::move(component)); }
+        void AddComponent(ID id, TComponent&& component) requires(Nano::Types::TupleContains<TComponent, TypesTuple> && std::is_move_constructible_v<TComponent>) { m_Storage.AddComponent<TComponent>(id, std::move(component)); }
         template<typename TComponent, typename ...TArgs>
-        void AddComponent(ID id, TArgs&& ...args) requires(std::is_constructible_v<TComponent, TArgs...>) { m_Storage.AddComponent<TComponent>(id, std::forward<TArgs>(args)...); }
+        void AddComponent(ID id, TArgs&& ...args) requires(Nano::Types::TupleContains<TComponent, TypesTuple> && std::is_constructible_v<TComponent, TArgs...>) { m_Storage.AddComponent<TComponent>(id, std::forward<TArgs>(args)...); }
 
         template<typename TComponent>
-        void RemoveComponent(ID id) { m_Storage.RemoveComponent<TComponent>(id); }
+        void RemoveComponent(ID id) requires(Nano::Types::TupleContains<TComponent, TypesTuple>) { m_Storage.RemoveComponent<TComponent>(id); }
 
         // Getters
         template<typename TComponent>
-        bool HasComponent(ID id) const { return m_Storage.HasComponent<TComponent>(id); }
+        bool HasComponent(ID id) const requires(Nano::Types::TupleContains<TComponent, TypesTuple>) { return m_Storage.HasComponent<TComponent>(id); }
 
         template<typename TComponent>
-        TComponent& GetComponent(ID id) { return m_Storage.GetComponent<TComponent>(id); }
+        TComponent& GetComponent(ID id) requires(Nano::Types::TupleContains<TComponent, TypesTuple>) { return m_Storage.GetComponent<TComponent>(id); }
         template<typename TComponent>
-        const TComponent& GetComponent(ID id) const { return m_Storage.GetComponent<TComponent>(id); }
+        const TComponent& GetComponent(ID id) const requires(Nano::Types::TupleContains<TComponent, TypesTuple>) { return m_Storage.GetComponent<TComponent>(id); }
 
-        // Views
-        template<typename ...ViewComponents>
-        auto View()
+        // Views // TODO: std::ranges::views::zip();
+        template<typename TComponent>
+        auto View() requires(Nano::Types::TupleContains<TComponent, TypesTuple>)
         {
-            // TODO: Receive primary somehow
-            Types::ForEachTypeInTuple<std::tuple<ViewComponents...>>([&]<typename T>() {  });
-            
-            /*
-            auto& others = std::forward_as_tuple(Get<Comps>()...);
+            auto& set = m_Storage.GetSparseSet<TComponent>();
+            NANO_ASSERT((set.GetIDs().size() == set.GetValues().size()), "Amount of entities doesn't equal amount of components.");
+            return std::ranges::views::zip(set.GetIDs(), set.GetValues());
+        }
 
-            // 2+3. Filter & transform in one pipeline:
-            return primary.entities()
-                | std::views::filter([&](ID id) {
-                // keep only e’s that exist in *all* comps
-                return (... && std::get<Comps&>(others).has(e));
-                    })
-                | std::views::transform([&](ID id) {
-                // turn e into a tuple<T&,V&,O&…>
-                return std::tuple{ std::get<Comps&>(others).get(e)... };
-                    });
-            */
+        template<typename ...TComponents>
+        auto View() requires((sizeof...(TComponents) > 1) && (Nano::Types::TupleContains<TComponents, TypesTuple> && ...))
+        {
+            size_t smallestSize = std::numeric_limits<size_t>::max();
+            std::variant<std::add_pointer_t<SparseSet<TComponents, ID>>...> smallest;
+
+            Nano::Types::ForEachTypeInTuple<std::tuple<TComponents...>>([&]<typename TComponent>()
+            {
+                auto& set = m_Storage.GetSparseSet<TComponent>();
+                if (set.Size() < smallestSize)
+                {
+                    smallestSize = set.Size();
+                    smallest = &set;
+                }
+            });
+
+            std::span<const ID> ids = std::visit([](auto&& obj) -> std::span<const ID> { return obj->GetIDs(); }, smallest);
+            auto sets = std::forward_as_tuple(m_Storage.GetSparseSet<TComponents>()...);
+            return Internal::ECS::ComponentView<ID, TComponents...>{ ids, std::move(sets) };
         }
 
         // Operators
 
-        // Iterators // TODO: std::ranges::views::zip();
+        // Iterators
 
     private:
         Internal::ECS::Storage<ID, Components...> m_Storage;
