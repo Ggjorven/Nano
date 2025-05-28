@@ -1,0 +1,2727 @@
+#pragma once
+
+#include <cstdint>
+#include <cstddef>
+#include <cstdlib>
+#include <exception>
+
+#include <any>
+#include <queue>
+#include <mutex>
+#include <future>
+#include <thread>
+#include <random>
+#include <ranges>
+#include <variant>
+#include <utility>
+#include <numeric>
+#include <concepts>
+#include <algorithm>
+#include <coroutine>
+#include <filesystem>
+#include <functional>
+#include <type_traits>
+#include <condition_variable>
+
+#include <format>
+#include <string>
+#include <string_view>
+
+#include <chrono>
+#include <ctime>
+#include <cstring>
+
+#include <iostream>
+#include <iomanip>
+#include <sstream>
+
+#include <set>
+#include <map>
+#include <tuple>
+#include <array>
+#include <optional>
+//#include <flat_map>
+#include <unordered_set>
+#include <unordered_map>
+
+// Compiler
+#if defined(_MSC_VER)
+    #define NANO_COMPILER_MSVC
+#elif defined(__clang__)
+    #define NANO_COMPILER_CLANG
+#elif defined(__GNUC__)
+    #define NANO_COMPILER_GCC
+#endif
+
+// Platform
+#if (defined(_WIN32) || defined(_WIN64)) && (!defined(NANO_PLATFORM_WINDOWS) && !defined(NANO_PLATFORM_DESKTOP))
+    #define NANO_PLATFORM_WINDOWS
+    #define NANO_PLATFORM_DESKTOP
+#elif defined(__ANDROID__) && (!defined(NANO_PLATFORM_ANDROID) && !defined(NANO_PLATFORM_MOBILE))
+    #define NANO_PLATFORM_ANDROID
+    #define NANO_PLATFORM_MOBILE
+#elif defined(__APPLE__) && ((!defined(NANO_PLATFORM_MACOS) || defined(NANO_PLATFORM_IOS)) && (!defined(NANO_PLATFORM_DESKTOP) || !defined(NANO_PLATFORM_MOBILE)))
+    #include <TargetConditionals.h>
+    #if TARGET_OS_MAC
+        #define NANO_PLATFORM_MACOS
+        #define NANO_PLATFORM_DESKTOP
+    #elif TARGET_OS_IPHONE
+        #define NANO_PLATFORM_IOS
+        #define NANO_PLATFORM_MOBILE
+    #endif
+#elif defined(__linux__) && (!defined(NANO_PLATFORM_LINUX) && !defined(NANO_PLATFORM_DESKTOP))
+    #define NANO_PLATFORM_LINUX
+    #define NANO_PLATFORM_DESKTOP
+#endif
+
+#if defined(__ANDROID__) || defined(__linux__) || defined(__APPLE__)
+    #define NANO_PLATFORM_UNIX
+#endif
+
+#if defined(__APPLE__)
+    #define NANO_PLATFORM_APPLE
+#endif
+
+// Debug-break
+#if defined(NANO_PLATFORM_WINDOWS)
+    #include <intrin.h>
+    #define NANO_DEBUG_BREAK() __debugbreak()
+#elif defined(NANO_PLATFORM_LINUX) || defined(NANO_PLATFORM_APPLE)
+    #include <csignal>
+    #define NANO_DEBUG_BREAK() std::raise(SIGTRAP)
+#else
+    #include <cstdlib>
+    #define NANO_DEBUG_BREAK() std::abort()
+#endif
+
+#ifndef _CRT_SECURE_NO_WARNINGS
+    #define _CRT_SECURE_NO_WARNINGS
+#endif
+
+// Debug
+#if defined(NANO_DEBUG)
+    #define NANO_DEBUG_DEFERREDCONSTRUCT
+    #define NANO_DEBUG_EXPECTED
+
+    #if !defined(NANO_ASSERT)
+        #define NANO_ASSERT(x, msg) do { if (!(x)) { std::cerr << "Nano: Assert failed" << msg << std::endl; NANO_DEBUG_BREAK(); } } while (false)
+    #endif
+#endif
+
+// Implementations
+#if defined(NANO_IMPLEMENTATION)
+    #define NANO_IMPL_RANDOM
+    #define NANO_IMPL_TIME
+    #define NANO_IMPL_THREADING
+    #define NANO_IMPL_TESTS
+    #define NANO_IMPL_BENCHMARKS
+#endif
+
+// Function start-up macros
+#define NANO_RUN_FUNCTION_HELPER2(id, functionName, ...)	    \
+namespace													    \
+{															    \
+	inline void _Run##id()									    \
+	{														    \
+		functionName(__VA_ARGS__);							    \
+	}														    \
+															    \
+	static const char _RunDummy##id = (_Run##id(), 0);		    \
+}
+#define NANO_RUN_FUNCTION_HELPER(id, functionName, ...)      NANO_RUN_FUNCTION_HELPER2(id, functionName, __VA_ARGS__)
+
+#define NANO_RUN_FUNCTION_NN_HELPER2(id, functionName, ...)  \
+inline static void _Run##id()								    \
+{															    \
+    functionName(__VA_ARGS__);								    \
+}															    \
+															    \
+inline static const char _RunDummy##id = (_Run##id(), 0)
+#define NANO_RUN_FUNCTION_NN_HELPER(id, functionName, ...)   NANO_RUN_FUNCTION_NN_HELPER2(id, functionName, __VA_ARGS__)
+
+#define NANO_RUN_FUNCTION(functionName, ...)				    NANO_RUN_FUNCTION_HELPER(__COUNTER__, functionName, __VA_ARGS__)
+#define NANO_RUN_FUNCTION_NN(functionName, ...)			    NANO_RUN_FUNCTION_NN_HELPER(__COUNTER__, functionName, __VA_ARGS__)
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- Logging HPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+namespace Nano
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Colours
+    ////////////////////////////////////////////////////////////////////////////////////
+    namespace Log::Colour
+    {
+        // Reset
+        inline constexpr std::string_view Reset = "\033[0m";
+
+        // Text Attributes
+        inline constexpr std::string_view Bold = "\033[1m";
+        inline constexpr std::string_view Dim = "\033[2m";
+        inline constexpr std::string_view Italic = "\033[3m";
+        inline constexpr std::string_view Underline = "\033[4m";
+        inline constexpr std::string_view BlinkSlow = "\033[5m";
+        inline constexpr std::string_view BlinkFast = "\033[6m";
+        inline constexpr std::string_view Invert = "\033[7m";
+        inline constexpr std::string_view Hidden = "\033[8m";
+        inline constexpr std::string_view StrikeThrough = "\033[9m";
+
+        // Foreground Colors
+        inline constexpr std::string_view BlackFG = "\033[30m";
+        inline constexpr std::string_view RedFG = "\033[31m";
+        inline constexpr std::string_view GreenFG = "\033[32m";
+        inline constexpr std::string_view YellowFG = "\033[33m";
+        inline constexpr std::string_view BlueFG = "\033[34m";
+        inline constexpr std::string_view MagentaFG = "\033[35m";
+        inline constexpr std::string_view CyanFG = "\033[36m";
+        inline constexpr std::string_view WhiteFG = "\033[37m";
+
+        // Bright Foreground Colors
+        inline constexpr std::string_view BrightBlackFG = "\033[90m";
+        inline constexpr std::string_view BrightRedFG = "\033[91m";
+        inline constexpr std::string_view BrightGreenFG = "\033[92m";
+        inline constexpr std::string_view BrightYellowFG = "\033[93m";
+        inline constexpr std::string_view BrightBlueFG = "\033[94m";
+        inline constexpr std::string_view BrightMagentaFG = "\033[95m";
+        inline constexpr std::string_view BrightCyanFG = "\033[96m";
+        inline constexpr std::string_view BrightWhiteFG = "\033[97m";
+
+        // Background Colors
+        inline constexpr std::string_view BlackBG = "\033[40m";
+        inline constexpr std::string_view RedBG = "\033[41m";
+        inline constexpr std::string_view GreenBG = "\033[42m";
+        inline constexpr std::string_view YellowBG = "\033[43m";
+        inline constexpr std::string_view BlueBG = "\033[44m";
+        inline constexpr std::string_view MagentaBG = "\033[45m";
+        inline constexpr std::string_view CyanBG = "\033[46m";
+        inline constexpr std::string_view WhiteBG = "\033[47m";
+
+        // Bright Background Colors
+        inline constexpr std::string_view BrightBlackBG = "\033[100m";
+        inline constexpr std::string_view BrightRedBG = "\033[101m";
+        inline constexpr std::string_view BrightGreenBG = "\033[102m";
+        inline constexpr std::string_view BrightYellowBG = "\033[103m";
+        inline constexpr std::string_view BrightBlueBG = "\033[104m";
+        inline constexpr std::string_view BrightMagentaBG = "\033[105m";
+        inline constexpr std::string_view BrightCyanBG = "\033[106m";
+        inline constexpr std::string_view BrightWhiteBG = "\033[107m";
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Loggging
+    ////////////////////////////////////////////////////////////////////////////////////
+    namespace Log
+    {
+
+        ////////////////////////////////////////////////////////////////////////////////////
+        // Utils
+        ////////////////////////////////////////////////////////////////////////////////////
+        inline void SetColour(std::string_view colour)
+        {
+            std::cout << colour;
+        }
+
+        ////////////////////////////////////////////////////////////////////////////////////
+        // Print
+        ////////////////////////////////////////////////////////////////////////////////////
+        template <typename... TArgs>
+        inline void Print(std::string_view msg)
+        {
+            std::cout << msg << Colour::Reset;
+        }
+
+        template<typename ...TArgs>
+        inline void PrintF(std::format_string<TArgs...> fmt, TArgs&&... args)
+        {
+            std::cout << std::format(fmt, std::forward<TArgs>(args)...) << Colour::Reset;
+        }
+
+        template<typename... TArgs>
+        inline void PrintLn(std::format_string<TArgs...> fmt, TArgs&&... args)
+        {
+            PrintF(fmt, std::forward<TArgs>(args)...);
+            std::cout << '\n';
+        }
+
+        ////////////////////////////////////////////////////////////////////////////////////
+        // Levels
+        ////////////////////////////////////////////////////////////////////////////////////
+        enum class Level : uint8_t { Trace, Info, Warn, Error, Fatal };
+
+        template<Level level>
+        constexpr std::string_view LevelTag()
+        {
+            if constexpr (level == Level::Trace)
+                return "T";
+            else if constexpr (level == Level::Info)
+                return "I";
+            else if constexpr (level == Level::Warn)
+                return "W";
+            else if constexpr (level == Level::Error)
+                return "E";
+            else if constexpr (level == Level::Fatal)
+                return "F";
+        }
+
+        template<Level level, typename ...TArgs>
+        void PrintLvl(std::format_string<TArgs...> fmt, TArgs&&... args)
+        {
+            std::string time;
+            {
+                auto now = std::chrono::system_clock::now();
+                std::time_t nowTime = std::chrono::system_clock::to_time_t(now);
+
+                std::ostringstream oss;
+                oss << std::put_time(std::localtime(&nowTime), "%H:%M:%S");
+                time = oss.str();
+            }
+
+            std::string message = std::format("[{0}] [{1}]: {2}", time, LevelTag<level>(), std::format(fmt, std::forward<TArgs>(args)...));
+
+            // Set colour
+            if constexpr (level == Level::Trace)
+                std::cout << Colour::Reset;
+            else if constexpr (level == Level::Info)
+                std::cout << Colour::GreenFG;
+            else if constexpr (level == Level::Warn)
+                std::cout << Colour::BrightYellowFG;
+            else if constexpr (level == Level::Error)
+                std::cout << Colour::BrightRedFG;
+            else if constexpr (level == Level::Fatal)
+                std::cout << Colour::RedBG;
+
+            // Simulate PrintLn
+            Print(message);
+            std::cout << '\n';
+        }
+
+    };
+
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- Text HPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+namespace Nano::Text
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Utility
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename ...Args>
+    std::string Format(std::format_string<Args...> fmt, Args&& ...args)
+    {
+        return std::format(fmt, std::forward<Args>(args)...);
+    }
+
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- Traits HPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+namespace Nano::Traits
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Traits
+    ////////////////////////////////////////////////////////////////////////////////////
+    struct NoCopy
+    {
+    public:
+        NoCopy() = default;
+        NoCopy(const NoCopy&) = delete;
+        NoCopy& operator=(const NoCopy&) = delete;
+    };
+
+    struct NoMove
+    {
+    public:
+        NoMove() = default;
+        NoMove(NoMove&&) = delete;
+        NoMove& operator = (NoMove&&) = delete;
+    };
+
+    struct NoConstruct
+    {
+    public:
+        NoConstruct() = delete;
+    };
+
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- Hash HPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+namespace Nano
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Hash
+    ////////////////////////////////////////////////////////////////////////////////////
+    class Hash
+    {
+    public:
+        // String hashing
+        static constexpr uint64_t fnv1(const std::string_view str)
+        {
+            uint64_t hash = 14695981039346656037ULL;
+            for (char c : str)
+            {
+                hash *= 1099511628211ULL;
+                hash ^= static_cast<uint64_t>(c);
+            }
+
+            return hash;
+        }
+
+        static constexpr uint64_t fnv1a(const std::string_view str)
+        {
+            uint64_t hash = 14695981039346656037ULL;
+            for (char c : str)
+            {
+                hash ^= static_cast<uint64_t>(c);
+                hash *= 1099511628211ULL;
+            }
+
+            return hash;
+        }
+
+        static constexpr uint64_t djb2(const std::string_view str)
+        {
+            uint64_t hash = 5381;
+            for (char c : str)
+                hash = ((hash << 5) + hash) + static_cast<uint64_t>(c); // hash * 33 + c
+
+            return hash;
+        }
+
+        static constexpr uint64_t sdbm(const std::string_view str)
+        {
+            uint64_t hash = 0;
+            for (char c : str)
+                hash = static_cast<uint64_t>(c) + (hash << 6) + (hash << 16) - hash;
+
+            return hash;
+        }
+
+        static constexpr uint32_t crc32(const std::string_view str)
+        {
+            uint32_t crc = 0xFFFFFFFF;
+            for (char c : str)
+            {
+                crc ^= static_cast<uint8_t>(c);
+                for (int i = 0; i < 8; ++i)
+                    crc = (crc >> 1) ^ (0xEDB88320 & ((crc & 1)));
+            }
+
+            return ~crc;
+        }
+
+        static constexpr uint64_t murmur64(const std::string_view str, uint64_t seed = 0xc70f6907UL)
+        {
+            uint64_t hash = seed ^ (str.size() * 0xc6a4a7935bd1e995);
+            for (char c : str)
+            {
+                uint64_t k = static_cast<uint64_t>(c);
+                k *= 0xc6a4a7935bd1e995;
+                k ^= k >> 47;
+                k *= 0xc6a4a7935bd1e995;
+                hash ^= k;
+                hash *= 0xc6a4a7935bd1e995;
+            }
+
+            hash ^= hash >> 47;
+            hash *= 0xc6a4a7935bd1e995;
+            hash ^= hash >> 47;
+
+            return hash;
+        }
+
+        // Integer hashing
+        static constexpr uint64_t UInt64(uint64_t x)
+        {
+            x ^= x >> 33;
+            x *= 0xff51afd7ed558ccdULL;
+            x ^= x >> 33;
+            x *= 0xc4ceb9fe1a85ec53ULL;
+            x ^= x >> 33;
+
+            return x;
+        }
+
+    public:
+        // Helper functions
+        static constexpr uint64_t Combine(const uint64_t hash1, const uint64_t hash2)
+        {
+            uint64_t combined = hash1 + 0x9e3779b97f4a7c15;
+            combined = (combined ^ (hash2 >> 30)) * 0xbf58476d1ce4e5b9;
+            combined = (combined ^ (combined >> 27)) * 0x94d049bb133111eb;
+
+            return combined ^ (combined >> 31);
+        }
+    };
+
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- Memory HPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+namespace Nano
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // DeferredConstruct<T>
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename T, bool Destroyable = false>
+    class DeferredConstruct : public Traits::NoCopy, public Traits::NoMove
+    {
+    public:
+        using ValueType = T;
+    public:
+        // Constructor & Destructor
+        DeferredConstruct() = default;
+        inline ~DeferredConstruct()
+        {
+            if constexpr (!std::is_trivially_destructible_v<T>)
+            {
+                if constexpr (Destroyable)
+                {
+                    if (!std::ranges::all_of(m_Storage, [](std::byte b) { return b == std::byte{ 0 }; }))
+                    {
+                        CheckConstructed();
+                        reinterpret_cast<T*>(m_Storage)->~T();
+                    }
+                }
+                else
+                {
+                    CheckConstructed();
+                    reinterpret_cast<T*>(m_Storage)->~T();
+                }
+            }
+        }
+
+        // Operators
+        inline operator T& () { CheckConstructed(); return *reinterpret_cast<T*>(m_Storage); }
+        inline operator const T& () const { CheckConstructed(); return *reinterpret_cast<const T*>(m_Storage); }
+        inline operator T* () { CheckConstructed(); return reinterpret_cast<T*>(m_Storage); }
+        inline operator const T* () const { CheckConstructed(); return reinterpret_cast<const T*>(m_Storage); }
+
+        inline T* operator -> () { CheckConstructed(); return reinterpret_cast<T*>(m_Storage); }
+        inline const T* operator -> () const { CheckConstructed(); return reinterpret_cast<const T*>(m_Storage); }
+
+        // Getters
+        inline T& Get() { CheckConstructed(); return *reinterpret_cast<T*>(m_Storage); }
+        inline const T& Get() const { CheckConstructed(); return *reinterpret_cast<const T*>(m_Storage); }
+
+        // Methods
+        template<typename ...Args>
+        inline void Construct(Args&& ...args)
+        {
+            #if defined(NANO_DEBUG_DEFERREDCONSTRUCT)
+            if (m_Constructed) [[unlikely]]
+            {
+                NANO_ASSERT(false, "Object already constructed."); // Object already constructed, calling destructor on previous object! Please change your implementation to avoid re-constructing, since these checks are only available in Debug mode.
+                if constexpr (!std::is_trivially_destructible_v<T>)
+                    reinterpret_cast<T*>(m_Storage)->~T();
+            }
+
+            m_Constructed = true;
+            #endif
+
+            new (m_Storage) T(std::forward<Args>(args)...);
+        }
+
+        inline void Destroy() requires(Destroyable)
+        {
+            CheckConstructed();
+
+            if constexpr (!std::is_trivially_destructible_v<T>)
+                reinterpret_cast<T*>(m_Storage)->~T();
+
+            std::memset(m_Storage, 0, sizeof(m_Storage));
+
+            #if defined(NANO_DEBUG_DEFERREDCONSTRUCT)
+            m_Constructed = false;
+            #endif
+        }
+
+    private:
+        // Debug method
+        inline void CheckConstructed() const
+        {
+            #if defined(NANO_DEBUG_DEFERREDCONSTRUCT)
+            NANO_ASSERT(m_Constructed, "Object not constructed yet."); // Object not constructed yet.
+            #endif
+        }
+
+    private:
+        // std::aligned_storage is deprecated as of C++23
+        #if defined(NANO_COMPILER_GCC)
+            #pragma GCC diagnostic push
+            #pragma GCC diagnostic ignored "-Wpadded"
+                alignas(T) std::byte m_Storage[sizeof(T)] = {};
+            #pragma GCC diagnostic pop
+        #elif !defined(NANO_PLATFORM_APPLE)
+            #pragma warning(push)
+            #pragma warning(disable: 4324)
+                alignas(T) std::byte m_Storage[sizeof(T)] = {};
+            #pragma warning(pop)
+        #else
+                alignas(T) std::byte m_Storage[sizeof(T)] = {};
+        #endif
+
+        #if defined(NANO_DEBUG_DEFERREDCONSTRUCT)
+            bool m_Constructed = false;
+        #endif
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // SparseSet<T>
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename T, typename ID = uint64_t> requires(std::is_integral_v<ID>)
+    class SparseSet : public Traits::NoCopy
+    {
+    public:
+        static constexpr ID InvalidID = std::numeric_limits<ID>::max();
+    public:
+        // Constructor & Destructor
+        SparseSet() = default;
+        ~SparseSet() = default;
+
+        // Methods
+        void Add(ID id, const T& value) requires(std::is_copy_constructible_v<T>)
+        {
+            NANO_ASSERT(!Has(id), "Duplicate ID in SparseSet");
+
+            if (id >= m_Sparse.size())
+                m_Sparse.resize(id + 1, InvalidID);
+
+            m_Sparse[id] = static_cast<ID>(m_IDs.size());
+            m_IDs.push_back(id);
+            m_Values.push_back(value);
+        }
+
+        void Add(ID id, T&& value) requires(std::is_move_constructible_v<T>)
+        {
+            NANO_ASSERT(!Has(id), "Duplicate ID in SparseSet");
+
+            if (id >= m_Sparse.size())
+                m_Sparse.resize(id + 1, InvalidID);
+
+            m_Sparse[id] = static_cast<ID>(m_IDs.size());
+            m_IDs.push_back(id);
+            m_Values.emplace_back(std::move(value));
+        }
+
+        template<typename ...Args>
+        void Add(ID id, Args&& ...args) requires (std::is_constructible_v<T, Args...>) 
+        {
+            NANO_ASSERT(!Has(id), "Duplicate ID in SparseSet");
+
+            if (id >= m_Sparse.size())
+                m_Sparse.resize(id + 1, InvalidID);
+
+            m_Sparse[id] = static_cast<ID>(m_IDs.size());
+            m_IDs.push_back(id);
+            m_Values.emplace_back(std::forward<Args>(args)...);
+        }
+
+        void Remove(ID id)
+        {
+            using std::swap;
+
+            NANO_ASSERT(Has(id), "ID not found in SparseSet"); 
+
+            ID idx = m_Sparse[id];
+            ID last = static_cast<ID>(m_IDs.size() - 1);
+
+            // Swap-remove
+            swap(m_IDs[idx], m_IDs[last]);
+            swap(m_Values[idx], m_Values[last]);
+
+            // Update sparse index of swapped-in ID
+            m_Sparse[m_IDs[idx]] = idx;
+
+            // Remove last
+            m_IDs.pop_back();
+            m_Values.pop_back();
+            m_Sparse[id] = InvalidID;
+        }
+
+        // Getters
+        inline bool Has(ID id) const { return id < m_Sparse.size() && m_Sparse[id] != InvalidID && m_Sparse[id] < m_IDs.size() && m_IDs[m_Sparse[id]] == id; }
+
+        inline T& Get(ID id) { NANO_ASSERT(Has(id), "No value present by this ID."); return m_Values[m_Sparse[id]]; }
+        inline const T& Get(ID id) const { NANO_ASSERT(Has(id), "No value present by this ID."); return m_Values[m_Sparse[id]]; }
+
+        inline size_t Size() const { return m_Values.size(); }
+        inline std::vector<ID>& GetIDs() { return m_IDs; }
+        inline const std::vector<ID>& GetIDs() const { return m_IDs; }
+        inline std::vector<T>& GetValues() { return m_Values; }
+        inline const std::vector<T>& GetValues() const { return m_Values; }
+
+        // Iterators
+        inline auto begin()         { return m_Values.begin(); }
+        inline auto end()           { return m_Values.end(); }
+        inline auto begin() const   { return m_Values.begin(); }
+        inline auto end()   const   { return m_Values.end(); }
+
+    private:
+        std::vector<ID> m_Sparse = { };
+        std::vector<ID> m_IDs = { };
+        std::vector<T> m_Values = { };
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // StaticString<N>
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<size_t N>
+    struct StaticString
+    {
+    public:
+        // Constructor & Destructor
+        constexpr StaticString(std::string_view sv) noexcept
+        {
+            std::copy(sv.begin(), sv.end(), m_Content.data());
+        }
+        constexpr ~StaticString() = default;
+
+        // Operators
+        constexpr operator std::string_view() const noexcept { return { m_Content.data(), N }; }
+
+    private:
+        std::array<char, N + 1> m_Content = {};
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // ArenaAllocator
+    ////////////////////////////////////////////////////////////////////////////////////
+    // TODO: ...
+
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- Types HPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+namespace Nano::Internal::Types
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Internal naming
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename T>
+    struct ConstexprName
+    {
+    public:
+        inline constexpr static const std::string_view Invalid = "1nvalid";
+    public:
+        constexpr static std::string_view TypeNameImpl()
+        {
+            constexpr std::string_view fn = FunctionSignatureImpl();
+
+            #if defined(NANO_COMPILER_MSVC) || defined(NANO_COMPILER_CLANG)
+            constexpr std::string_view startSeq = "ConstexprName<";
+            constexpr std::string_view endSeq = ">::FunctionSignatureImpl";
+
+            size_t start = fn.find(startSeq);
+            if (start == std::string_view::npos)
+                return Invalid;
+            start += startSeq.size();
+
+            size_t end = fn.rfind(endSeq);
+            if (end == std::string_view::npos)
+                return Invalid;
+
+            std::string_view typeName = fn.substr(start, end - start);
+            if constexpr (std::is_class_v<T>)
+            {
+                // Check for nested define
+                size_t colonPos = typeName.rfind("::");
+                if (colonPos != std::string_view::npos)
+                {
+                    typeName = typeName.substr(colonPos + std::string_view("::").size()); // Move past the space
+                }
+                else
+                {
+                    size_t spacePos = typeName.rfind(' ');
+                    if (spacePos != std::string_view::npos)
+                        typeName = typeName.substr(spacePos + std::string_view(" ").size()); // Move past the space
+                }
+            }
+
+            return typeName;
+
+            #elif defined(NANO_COMPILER_GCC)
+
+            constexpr std::string_view startSeq = "with T = ";
+            constexpr std::string_view endSeq = ";";
+
+            size_t start = fn.find(startSeq);
+            if (start == std::string_view::npos)
+                return Invalid;
+            start += startSeq.size();
+
+            size_t end = fn.rfind(endSeq);
+            if (end == std::string_view::npos)
+                return Invalid;
+
+            std::string_view typeName = fn.substr(start, end - start);
+            if constexpr (std::is_class_v<T>)
+            {
+                // Check for nested define
+                size_t colonPos = typeName.rfind("::");
+                if (colonPos != std::string_view::npos)
+                {
+                    typeName = typeName.substr(colonPos + std::string_view("::").size()); // Move past the space
+                }
+            }
+
+            return typeName;
+
+            #else
+                #error Nano Types: Unsupported compiler...
+            #endif
+        }
+
+        constexpr static std::string_view FunctionSignatureImpl()
+        {
+            #if defined(NANO_COMPILER_MSVC)
+                return { __FUNCSIG__, sizeof(__FUNCSIG__) };
+            #elif defined(NANO_COMPILER_GCC) || defined(NANO_COMPILER_CLANG)
+                return { __PRETTY_FUNCTION__, sizeof(__PRETTY_FUNCTION__) };
+            #else
+                #error Nano Types: Unsupported compiler...
+            #endif
+        }
+
+    public:
+        constexpr static const std::string_view TypeName = TypeNameImpl();
+        constexpr static const std::string_view FunctionSignature = FunctionSignatureImpl();
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Tuple
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename Tuple>
+    inline constexpr size_t TupleTypeCount = std::tuple_size_v<Tuple>;
+
+    template<size_t Index, typename Tuple>
+    using TupleIndexedType = std::tuple_element_t<Index, Tuple>;
+
+    template<typename T, typename Tuple, size_t Index = 0>
+    constexpr size_t TupleTypeToIndex()
+    {
+        if constexpr (Index < TupleTypeCount<Tuple> && std::is_same_v<T, TupleIndexedType<Index, Tuple>>) 
+        {
+            return Index;
+        }
+        else if constexpr (Index + 1 < TupleTypeCount<Tuple>) 
+        {
+            return TupleTypeToIndex<T, Tuple, Index + 1>();
+        }
+        else 
+        {
+            static_assert(Index + 1 <= TupleTypeCount<Tuple>, "Type not found in Tuple");
+            return 0; // Note: Unreachable, just to satisfy return-type rules
+        }
+    }
+
+    template<typename T, typename Tuple>
+    struct TupleContains;
+
+    template<typename T, typename... Types>
+    struct TupleContains<T, std::tuple<Types...>> : std::bool_constant<(std::is_same_v<T, Types> || ...)> {};
+
+    template<typename Tuple, typename TFunc, std::size_t... I>
+    constexpr void ForEachTypeInTuple(TFunc&& func, std::index_sequence<I...>)
+    {
+        (func.template operator()<std::tuple_element_t<I, Tuple>>(), ...);
+    }
+
+}
+
+namespace Nano::Types
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Name
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename T>
+    constexpr std::string_view Name()
+    {
+        return Nano::Internal::Types::ConstexprName<T>::TypeName;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Tuple
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename Tuple>
+    inline constexpr size_t TupleTypeCount = Nano::Internal::Types::TupleTypeCount<Tuple>;
+
+    template<size_t Index, typename Tuple>
+    using TupleIndexedType = Nano::Internal::Types::TupleIndexedType<Index, Tuple>;
+
+    template<typename T, typename Tuple>
+    inline constexpr size_t TupleTypeIndex = Nano::Internal::Types::TupleTypeToIndex<T, Tuple, 0>();
+
+    template<typename T, typename Tuple>
+    inline constexpr bool TupleContains = Nano::Internal::Types::TupleContains<T, Tuple>::value;
+
+    template<typename Tuple, typename TFunc>
+    constexpr void ForEachTypeInTuple(TFunc&& func)
+    {
+        Nano::Internal::Types::ForEachTypeInTuple<Tuple>(std::forward<TFunc>(func), std::make_index_sequence<TupleTypeCount<Tuple>>{});
+    }
+
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- Enum HPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+namespace Nano::Enum
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Customizations
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename TEnum> requires(std::is_enum_v<TEnum>)
+    struct Range : public Traits::NoConstruct
+    {
+    public:
+        inline static constexpr int32_t Min = ((std::is_signed_v<std::underlying_type_t<TEnum>>) ? -128 : 0);
+        inline static constexpr int32_t Max = ((std::is_signed_v<std::underlying_type_t<TEnum>>) ? 128 : 255);
+
+        static_assert((Max - Min <= std::numeric_limits<uint16_t>::max()), "[Max - Min] must not exceed uint16 max value.");
+    };
+
+}
+
+namespace Nano::Internal::Enum
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Internal naming
+    ////////////////////////////////////////////////////////////////////////////////////
+    #if defined(NANO_COMPILER_MSVC)
+    template<typename TEnum, TEnum EValue> requires(std::is_enum_v<TEnum>)
+    class ConstexprName
+    {
+    public:
+        inline constexpr static const std::string_view ClassToken = "Nano::Internal::Enum::ConstexprName<";
+        inline constexpr static const std::string_view Invalid = "1nvalid";
+
+    public:
+        template<TEnum> requires(std::is_enum_v<TEnum>)
+        constexpr static std::string_view FullNameImpl()
+        {
+            constexpr std::string_view FunctionToken = ">::FullNameImpl<";
+
+            // Function signature
+            constexpr std::string_view function = __FUNCSIG__;
+
+            // Class token
+            constexpr auto startClassToken = function.find(ClassToken);
+            constexpr auto endClassToken = startClassToken + ClassToken.size();
+            if constexpr (startClassToken == std::string_view::npos)
+                return Invalid;
+
+            // Function token
+            constexpr auto startFunctionToken = function.find(FunctionToken, endClassToken);
+            constexpr auto endFunctionToken = startFunctionToken + FunctionToken.size();
+            if constexpr (startFunctionToken == std::string_view::npos)
+                return Invalid;
+
+            // Close marker
+            constexpr auto closeMarker = function.find('>', endFunctionToken);
+            if constexpr (closeMarker == std::string_view::npos)
+                return Invalid;
+
+            // Full name
+            constexpr std::string_view fullName = function.substr(endFunctionToken, closeMarker - endFunctionToken);
+
+            // Brackets (if brackets, then not a valid enum name, ex. (enum Dummy)0xa instead of Dummy::First)
+            if constexpr (fullName.find('(') != std::string_view::npos)
+                return Invalid;
+
+            return fullName;
+        }
+
+        constexpr static std::string_view ElementNameImpl()
+        {
+            constexpr std::string_view fullName = FullNameImpl<EValue>();
+
+            // Check for invalid name
+            if constexpr (!fullName.compare(Invalid))
+                return Invalid;
+
+            // '::' marker
+            constexpr auto startColon = fullName.rfind("::");
+            constexpr auto endColon = startColon + std::string_view("::").size();
+            if constexpr (startColon == std::string_view::npos) // If not an enum class but a regular enum
+                return fullName;
+
+            // Element name
+            constexpr std::string_view elementName = fullName.substr(endColon, fullName.size() - endColon);
+
+            return elementName;
+        }
+
+        template<TEnum>
+        constexpr static std::string_view FunctionSignatureImpl()
+        {
+            return { __FUNCSIG__, sizeof(__FUNCSIG__) };
+        }
+
+    public:
+        constexpr static const std::string_view FullName = FullNameImpl<EValue>();
+        constexpr static const std::string_view ElementName = ElementNameImpl();
+
+        constexpr static const std::string_view FunctionSignature = FunctionSignatureImpl<EValue>();
+    };
+
+    #elif defined(NANO_COMPILER_GCC) || defined(NANO_COMPILER_CLANG)
+    template<typename TEnum, TEnum EValue> requires(std::is_enum_v<TEnum>)
+    class ConstexprName
+    {
+        constexpr static std::string_view FullNameImpl()
+        {
+            #if defined(NANO_COMPILER_CLANG)
+            constexpr auto end = std::string_view(__PRETTY_FUNCTION__).find_last_of(']');
+            if constexpr (end == std::string_view::npos)
+                return Invalid;
+
+            // '=' marker
+            constexpr auto start = std::string_view(__PRETTY_FUNCTION__).rfind("EValue = ") + 7;
+            if constexpr (start == std::string_view::npos)
+                return Invalid;
+
+            #else
+
+            // Ending marker
+            constexpr auto end = std::string_view(__PRETTY_FUNCTION__).find_last_of(';');
+            if constexpr (end == std::string_view::npos)
+                return Invalid;
+
+            // '=' marker
+            constexpr auto start = std::string_view(__PRETTY_FUNCTION__).find_last_of('=', end);
+            if constexpr (start == std::string_view::npos)
+                return Invalid;
+
+#           endif
+
+            // 0 <= start < end
+            if constexpr (end - start <= 2)
+                return Invalid;
+
+            return std::string_view(__PRETTY_FUNCTION__).substr(start + 2, end - start - 2);
+        }
+
+        constexpr static std::string_view ElementNameImpl()
+        {
+            constexpr std::string_view fullName = FullNameImpl();
+
+            // Check for invalid name
+            if constexpr (!fullName.compare(Invalid))
+                return Invalid;
+
+            // '::' marker
+            constexpr auto startColon = fullName.rfind("::");
+            constexpr auto endColon = startColon + std::string_view("::").size();
+            if constexpr (startColon == std::string_view::npos) // If not an enum class but a regular enum
+                return fullName;
+
+            // Element name
+            constexpr std::string_view elementName = fullName.substr(endColon, fullName.size() - endColon);
+
+            return elementName;
+        }
+
+        constexpr static std::string_view FunctionSignatureImpl()
+        {
+            return { __PRETTY_FUNCTION__, sizeof(__PRETTY_FUNCTION__) };
+        }
+
+    public:
+        constexpr static const std::string_view FullName = FullNameImpl();
+        constexpr static const std::string_view ElementName = ElementNameImpl();
+
+        constexpr static const std::string_view FunctionSignature = FunctionSignatureImpl();
+    };
+
+    #else
+        #error Nano Enum: Unsupported compiler...
+    #endif
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Helper functions
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename TEnum, TEnum EValue> requires(std::is_enum_v<TEnum>)
+    constexpr std::string_view Name()
+    {
+        if constexpr (ConstexprName<TEnum, EValue>::ElementName == ConstexprName<TEnum, EValue>::Invalid)
+            return {};
+
+        return ConstexprName<TEnum, EValue>::ElementName;
+    }
+
+    template<typename TEnum, TEnum EValue> requires(std::is_enum_v<TEnum>)
+    constexpr bool IsValid()
+    {
+        constexpr TEnum value = static_cast<TEnum>(EValue);
+        return !Name<TEnum, value>().empty();
+    }
+
+    template<typename TEnum> requires(std::is_enum_v<TEnum>)
+    constexpr TEnum UAlue(size_t v)
+    {
+        return static_cast<TEnum>(Nano::Enum::Range<TEnum>::Min + v);
+    }
+
+    template<size_t N>
+    constexpr size_t CountValues(const bool(&valid)[N])
+    {
+        size_t count = 0;
+        for (size_t n = 0; n < N; n++)
+        {
+            if (valid[n])
+                ++count;
+        }
+
+        return count;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Values
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename TEnum, size_t... I> requires(std::is_enum_v<TEnum>)
+    constexpr auto ValuesImpl(std::index_sequence<I...>)
+    {
+        constexpr bool valid[sizeof...(I)] = { IsValid<TEnum, UAlue<TEnum>(I)>()... };
+        constexpr auto validCount = CountValues(valid);
+        static_assert(validCount > 0, "No support for empty enums.");
+
+        std::array<TEnum, validCount> values = {};
+        for (size_t offset = 0, n = 0; n < validCount; offset++)
+        {
+            if (valid[offset])
+            {
+                values[n] = UAlue<TEnum>(offset);
+                ++n;
+            }
+        }
+
+        return values;
+    }
+
+    template<typename TEnum> requires(std::is_enum_v<TEnum>)
+    constexpr auto ValuesImpl()
+    {
+        constexpr auto enumSize = Nano::Enum::Range<TEnum>::Max - Nano::Enum::Range<TEnum>::Min + 1;
+        return ValuesImpl<TEnum>(std::make_index_sequence<enumSize>({}));
+    }
+
+    template<typename TEnum> requires(std::is_enum_v<TEnum>)
+    inline constexpr auto Values = ValuesImpl<TEnum>();
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Entries
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename TEnum, size_t... I> requires(std::is_enum_v<TEnum>)
+    constexpr auto EntriesImpl(std::index_sequence<I...>)
+    {
+        return std::array<std::pair<TEnum, std::string_view>, sizeof...(I)>{
+            { { Values<TEnum>[I], Name<TEnum, Values<TEnum>[I]>() }... }
+        };
+    }
+
+    template<typename TEnum> requires(std::is_enum_v<TEnum>)
+    inline constexpr auto Entries = EntriesImpl<TEnum>(std::make_index_sequence<Values<TEnum>.size()>());
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Utilities
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename TEnum> requires(std::is_enum_v<TEnum>)
+    constexpr size_t Count()
+    {
+        constexpr auto values = Entries<TEnum>;
+        return values.size();
+    }
+
+    template<typename TEnum> requires(std::is_enum_v<TEnum>)
+    constexpr size_t Index(const TEnum value)
+    {
+        constexpr auto values = Entries<TEnum>;
+
+        size_t index = 0;
+        for (const auto& [v, n] : values)
+        {
+            if (v == value)
+                return index;
+
+            index++;
+        }
+
+        return index;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Fusing
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename TEnum> requires(std::is_enum_v<TEnum>)
+    constexpr uintmax_t FuseOne(uintmax_t hash, TEnum value)
+    {
+        constexpr auto typeHash = Hash::fnv1a(Nano::Types::Name<TEnum>());
+        uintmax_t integerValue = static_cast<uintmax_t>(value);
+
+        return (hash * 31) ^ (typeHash + integerValue);
+    }
+
+    template<typename TEnum> requires(std::is_enum_v<TEnum>)
+    constexpr uintmax_t Fuse(TEnum value)
+    {
+        return FuseOne(0, value);
+    }
+
+    template<typename TEnum, typename... TEnums> requires(std::is_enum_v<TEnum> && (std::is_enum_v<TEnums> && ...))
+    constexpr uintmax_t Fuse(TEnum head, TEnums... tail)
+    {
+        return FuseOne(Fuse(tail...), head);
+    }
+
+}
+
+namespace Nano::Enum
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Name
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename TEnum> requires(std::is_enum_v<TEnum>)
+    constexpr std::string_view Name(const TEnum value) 
+    {
+        constexpr const auto entries = Nano::Internal::Enum::Entries<TEnum>;
+
+        for (const auto& [val, name] : entries)
+        {
+            if (val == value)
+                return name;
+        }
+
+        return "";
+    }
+
+    // TODO: ...
+    template<typename TEnum> requires(std::is_enum_v<TEnum> /*&& std::is_class_v<TEnum>*/)
+    [[deprecated]] constexpr std::string_view FullName(const TEnum value)
+    {
+        //return Nano::Types::Name<TEnum>() + "::" + Nano::Enum::Name(value);
+        return "TODO";
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Fuse
+    ////////////////////////////////////////////////////////////////////////////////////
+    enum class Fused : uintmax_t;
+
+    template<typename... TEnums>
+    constexpr Fused Fuse(TEnums... values) requires((std::is_enum_v<TEnums> && ...))
+    {
+        static_assert(sizeof...(TEnums) >= 2, "Fuse requires at least 2 values.");
+        return static_cast<Fused>(Internal::Enum::Fuse<std::decay_t<TEnums>...>(values...));
+    }
+
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- Scope HPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+namespace Nano
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // ScopeExit
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename TFunc> requires(std::invocable<TFunc>)
+    class ScopeExit
+    {
+    public:
+        // Constructor & Destructor
+        inline explicit ScopeExit(TFunc&& func)
+            : m_Func(std::move(func)) {
+        }
+        inline ~ScopeExit()
+        {
+            if (m_Active)
+                m_Func();
+        }
+
+        // Method
+        inline void Release() { m_Active = false; }
+
+    private:
+        TFunc m_Func;
+        bool m_Active = true;
+    };
+
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- Functional HPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+namespace Nano::Functional
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // FunctionConversion
+    ////////////////////////////////////////////////////////////////////////////////////
+    class Conversion : public Traits::NoConstruct
+    {
+    public:
+        // Converts a member function into a static-like function
+        template<typename ObjType, typename ReturnType, typename... Args>
+        constexpr static auto ToStatic(ReturnType(ObjType::* memFn)(Args...))
+        {
+            return [memFn](ObjType* obj, Args... args) -> ReturnType { return (obj->*memFn)(args...); };
+        }
+
+        /*
+        // Calls the constructor with the native type
+        template<typename Type, typename ArgType>
+        static Type UseNativeArgTypeInType(std::any arg);
+
+        // Calls the function with the native type
+        template<typename Func, typename ArgType>
+        static auto UseNativeArgTypeInFunc(Func&& func, std::any arg) -> typename Pulse::Types::FunctionTraits<Func>::ReturnType;
+
+        // Calls the function with the native type in a made ^static member function^
+        template<typename Func, typename ClassType, typename ArgType>
+        static auto UseNativeArgTypeInSMemFunc(Func&& func, ClassType* instance, std::any arg) -> typename Pulse::Types::FunctionTraits<Func>::ReturnType;
+
+        // Calls the constructor with all the native types
+        template<typename Type, typename ...Args>
+        static Type UseNativeArgTypesInType(const std::vector<std::any>& args);
+
+        // Calls the function with all the native types
+        template<typename Func, typename ...Args>
+        static auto UseNativeArgTypesInFunc(Func&& func, const std::vector<std::any>& args) -> typename Pulse::Types::FunctionTraits<Func>::ReturnType;
+
+        // Calls the function with all the native types in a made ^static member function^
+        template<typename Func, typename ClassType, typename ...Args>
+        static auto UseNativeArgTypesInSMemFunc(Func&& func, ClassType* instance, const std::vector<std::any>& args) -> typename Pulse::Types::FunctionTraits<Func>::ReturnType;
+        */
+    };
+
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- Time HPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+namespace Nano::Time
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Formats
+    ////////////////////////////////////////////////////////////////////////////////////
+    namespace Period
+    {
+        struct Years            { using Ratio = std::chrono::years::period; };
+        struct Months           { using Ratio = std::chrono::months::period; };
+        struct Weeks            { using Ratio = std::chrono::weeks::period; };
+        struct Days             { using Ratio = std::chrono::days::period; };
+        struct Hours            { using Ratio = std::chrono::hours::period; };
+        struct Minutes          { using Ratio = std::chrono::minutes::period; };
+        struct Seconds          { using Ratio = std::chrono::seconds::period; };
+        struct Milliseconds     { using Ratio = std::chrono::milliseconds::period; };
+        struct Microseconds     { using Ratio = std::chrono::microseconds::period; };
+        struct Nanoseconds      { using Ratio = std::chrono::nanoseconds::period; };
+
+        template<typename TPeriod>
+        concept IsPeriod = requires { typename TPeriod::Ratio; };
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Casting
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename FromPeriod, typename ToPeriod, typename Representation = uint64_t>
+    inline Representation Cast(Representation from) requires(Period::IsPeriod<FromPeriod> && Period::IsPeriod<ToPeriod>)
+    {
+        std::chrono::duration_cast<std::chrono::duration<Representation, typename ToPeriod::Ratio>>(std::chrono::duration<Representation, typename FromPeriod::Ratio>(from)).count();
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Methods
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename TimePeriod = Period::Milliseconds, typename Representation = uint64_t>
+    inline Representation SinceEpoch() requires(Period::IsPeriod<TimePeriod>)
+    {
+        return std::chrono::duration_cast<std::chrono::duration<Representation, typename TimePeriod::Ratio>>(std::chrono::system_clock::now().time_since_epoch()).count();
+    }
+
+    template<typename TimePeriod = Period::Milliseconds, typename Representation = uint64_t>
+    inline Representation SteadyTime() requires(Period::IsPeriod<TimePeriod>) // Note: This will just increase normally even when user changes system time.
+    {
+        return std::chrono::duration_cast<std::chrono::duration<Representation, typename TimePeriod::Ratio>>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+
+    template<typename TimePeriod = Period::Milliseconds, typename Representation = uint64_t>
+    inline Representation HighResTime() requires(Period::IsPeriod<TimePeriod>) // Note: This is accurate to a microsecond (below that is often rounded up/down, due to internal timer interval)
+    {
+        return std::chrono::duration_cast<std::chrono::duration<Representation, typename TimePeriod::Ratio>>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+    }
+
+    template<typename TimePeriod = Period::Milliseconds, typename Representation = double>
+    inline void Sleep(Representation time) // Note: Makes the current thread sleep
+    {
+        std::this_thread::sleep_for(std::chrono::duration<Representation, typename TimePeriod::Ratio>(time));
+    }
+
+    template<typename TimePeriod = Period::Milliseconds, typename Representation = double>
+    inline void BusyWait(Representation time) // Note: Uses a lot of CPU (but is really accurate)
+    {
+        auto start = std::chrono::steady_clock::now();
+        while (std::chrono::steady_clock::now() - start < std::chrono::duration<Representation, typename TimePeriod::Ratio>(time));
+    }
+
+    std::string String(std::string_view format = "%H:%M:%S");
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Timer
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename TimePeriod = Period::Milliseconds, typename Representation = double> requires(Period::IsPeriod<TimePeriod>)
+    class Timer // Note: Uses high resolution clock
+    {
+    public:
+        // Constructor & Destructor
+        inline Timer(bool startOnConstruct = true)
+        {
+            // Note: This static_assert is in the function to only call it when the functionality of this class is used.
+            static_assert(std::chrono::high_resolution_clock::is_steady, "High resolution clock not steady on this platform.");
+
+            if (startOnConstruct)
+                Start();
+        }
+        ~Timer() = default;
+
+        // Methods
+        inline void Start()
+        {
+            m_Start = HighResTime<TimePeriod, Representation>();
+        }
+
+        Representation Restart()
+        {
+            Representation end = HighResTime<TimePeriod, Representation>();
+            Representation time = end - m_Start;
+            m_Start = end;
+            return time;
+        }
+
+        inline Representation TimeActive() const
+        {
+            return HighResTime<TimePeriod, Representation>() - m_Start;
+        }
+
+        // Operators
+        inline operator Representation() const { return TimeActive(); }
+
+        // Getters
+        inline Representation GetStart() const { return m_Start; }
+
+    private:
+        Representation m_Start = static_cast<Representation>(0);
+    };
+
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- Time CPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+#if defined(NANO_IMPL_TIME)
+namespace Nano::Time
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Methods
+    ////////////////////////////////////////////////////////////////////////////////////
+    std::string String(std::string_view format)
+    {
+        auto now = std::chrono::system_clock::now();
+        std::time_t nowTime = std::chrono::system_clock::to_time_t(now);
+
+        std::ostringstream oss;
+        oss << std::put_time(std::localtime(&nowTime), format.data());
+
+        return oss.str();
+    }
+
+}
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- Random HPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+namespace Nano
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Random
+    ////////////////////////////////////////////////////////////////////////////////////
+    class Random : Traits::NoConstruct
+    {
+    public:
+        // Seeding
+        inline static void Seed(uint64_t seed = Time::SinceEpoch<Time::Period::Milliseconds, uint64_t>())
+        {
+            s_RandomEngine.seed(static_cast<uint32_t>(seed));
+        }
+
+        // Floating point
+        inline static float Float(float min = 0.0f, float max = 1.0f)
+        {
+            return min + s_FloatDist(s_RandomEngine) * (max - min);
+        }
+
+        inline static double Double(double min = 0.0, double max = 1.0)
+        {
+            return min + s_DoubleDist(s_RandomEngine) * (max - min);
+        }
+
+        // Integer 
+        inline static int32_t Int(int32_t min = std::numeric_limits<int32_t>::min(), int32_t max = std::numeric_limits<int32_t>::max())
+        {
+            s_IntDist.param(typename decltype(s_IntDist)::param_type{ min, max });
+            return s_IntDist(s_RandomEngine);
+        }
+
+        inline static uint32_t UInt(uint32_t min = std::numeric_limits<uint32_t>::min(), uint32_t max = std::numeric_limits<uint32_t>::max())
+        {
+            s_UIntDist.param(typename decltype(s_UIntDist)::param_type{ min, max });
+            return s_UIntDist(s_RandomEngine);
+        }
+
+        // Boolean
+        inline static bool Bool(float trueProbability = 0.5f)
+        {
+            return s_FloatDist(s_RandomEngine) < trueProbability;
+        }
+
+        // Utils
+        inline static bool Chance(float percentage)
+        {
+            return Float(0.0f, 100.0f) < percentage;
+        }
+
+    private:
+        static thread_local std::mt19937 s_RandomEngine;
+        static thread_local std::uniform_int_distribution<int> s_IntDist;
+        static thread_local std::uniform_int_distribution<unsigned int> s_UIntDist;
+        static thread_local std::uniform_real_distribution<float> s_FloatDist;
+        static thread_local std::uniform_real_distribution<double> s_DoubleDist;
+    };
+
+    inline thread_local std::mt19937								Random::s_RandomEngine(static_cast<uint32_t>(Time::SinceEpoch<Time::Period::Milliseconds, uint64_t>()));
+    inline thread_local std::uniform_int_distribution<int>		    Random::s_IntDist;
+    inline thread_local std::uniform_int_distribution<unsigned int>	Random::s_UIntDist;
+    inline thread_local std::uniform_real_distribution<float>		Random::s_FloatDist(0.0f, 1.0f);
+    inline thread_local std::uniform_real_distribution<double>		Random::s_DoubleDist(0.0, 1.0);
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // FastRandom
+    ////////////////////////////////////////////////////////////////////////////////////
+    class FastRandom : public Traits::NoConstruct
+    {
+    public:
+        // Seeding
+        inline static void Seed(uint64_t seed = Time::SinceEpoch<Time::Period::Milliseconds, uint64_t>())
+        {
+            s_State = static_cast<uint32_t>(seed);
+        }
+
+        // Floating point
+        inline static float Float(float min = 0.0f, float max = 1.0f)
+        {
+            return min + (Next() / static_cast<float>(std::numeric_limits<uint32_t>::max())) * (max - min);
+        }
+
+        inline static double Double(double min = 0.0, double max = 1.0)
+        {
+            return min + (Next() / static_cast<double>(std::numeric_limits<uint32_t>::max())) * (max - min);
+        }
+
+        // Integer
+        inline static int32_t Int(int32_t min = std::numeric_limits<int32_t>::min(), int32_t max = std::numeric_limits<int32_t>::max())
+        {
+            return min + static_cast<int32_t>(Next() % (static_cast<uint64_t>(max) - static_cast<uint64_t>(min) + 1));
+        }
+
+        inline static uint32_t UInt(uint32_t min = std::numeric_limits<uint32_t>::min(), uint32_t max = std::numeric_limits<uint32_t>::max())
+        {
+            return min + (Next() % (static_cast<uint64_t>(max) - static_cast<uint64_t>(min) + 1));
+        }
+
+        // Boolean
+        inline static bool Bool(float trueProbability = 0.5f)
+        {
+            return Float(0.0f, 1.0f) < trueProbability;
+        }
+
+        // Utils
+        inline static bool Chance(float percentage)
+        {
+            return Float(0.0f, 100.0f) < percentage;
+        }
+
+    private:
+        // Private methods
+        inline static uint64_t Next() { return NextXORShift64(); } // Chosen FastRandom method
+
+        static uint64_t NextXORShift64();   // Very fast, low quality
+        static uint64_t NextSplitMix64();   // Great for seeding
+        static uint64_t NextPCG32();        // Great balance, highly recommended
+
+    private:
+        static thread_local uint64_t s_State;
+    };
+
+    inline thread_local uint64_t FastRandom::s_State = static_cast<uint32_t>(Time::SinceEpoch<Time::Period::Milliseconds, uint64_t>());
+
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- Random CPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+#if defined(NANO_IMPL_RANDOM)
+namespace Nano
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Private methods
+    ////////////////////////////////////////////////////////////////////////////////////
+    uint64_t FastRandom::NextXORShift64()
+    {
+        s_State ^= s_State << 13;
+        s_State ^= s_State >> 7;
+        s_State ^= s_State << 17;
+        return s_State;
+    }
+
+    uint64_t FastRandom::NextSplitMix64()
+    {
+        s_State += 0x9E3779B97F4A7C15ULL;
+        uint64_t z = s_State;
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+        return (z ^ (z >> 31));
+    }
+
+    uint64_t FastRandom::NextPCG32()
+    {
+        uint64_t oldstate = s_State;
+        s_State = oldstate * 6364136223846793005ULL + 1442695040888963407ULL;
+        uint32_t xorshifted = static_cast<uint32_t>(((oldstate >> 18u) ^ oldstate) >> 27u);
+        uint32_t rot = static_cast<uint32_t>(oldstate >> 59u);
+        return (xorshifted >> rot) | (static_cast<uint64_t>(xorshifted) << ((rot) & 31));
+    }
+
+}
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- Maths HPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+namespace Nano::Maths
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Utility
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename T>
+    constexpr uint8_t CountNumbers(T value) requires(std::is_arithmetic_v<T>)
+    {
+        std::array<char, 64> buffer = { };
+        auto [ptr, ec] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
+
+        if (!std::is_constant_evaluated())
+        {
+            NANO_ASSERT(ec == std::errc(), "Failed to convert number to string.");
+        }
+
+        std::string_view view(buffer.data(), ptr - buffer.data());
+
+        if constexpr (std::is_floating_point_v<T>) 
+        {
+            auto dot_pos = view.find('.');
+            return static_cast<uint8_t>(dot_pos == std::string_view::npos ? view.size() : dot_pos);
+        }
+
+        return static_cast<uint8_t>(view.size()); // For integers, it's all before the dot.
+    }
+
+    template<typename T>
+    std::string ToString(T value) requires(std::is_arithmetic_v<T>)
+    {
+        std::array<char, 64> buffer = { };
+        auto [ptr, ec] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
+
+        NANO_ASSERT(ec == std::errc(), "Failed to convert number to string.");
+
+        std::string_view view(buffer.data(), ptr - buffer.data());
+        return std::string(view);
+    }
+
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- ErrorHandling HPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+namespace Nano
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Expected<T, E>
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename T, typename E>
+    class Expected : public Traits::NoCopy, public Traits::NoMove
+    {
+    public:
+        using ValueType = T;
+        using ErrorType = E;
+    private:
+        // Utilitites
+        template<typename T2>               struct _GetExpectedErrorType;
+        template<typename T2, typename E2>  struct _GetExpectedErrorType<Expected<T2, E2>> { using Type = E2; };
+    public:
+        // Constructors & Destructor
+        inline Expected(const T& value) 
+            : m_Value(value), m_HasValue(true) {}
+        inline Expected(T&& value) 
+            : m_Value(std::move(value)), m_HasValue(true) {}
+        inline Expected(const E& error) 
+            : m_Error(error), m_HasValue(false) {}
+        inline Expected(E&& error) 
+            : m_Error(std::move(error)), m_HasValue(false) {}
+        inline ~Expected() 
+        {
+            if (m_HasValue)
+            {
+                if constexpr (!std::is_trivially_destructible_v<T>)
+                {
+                    m_Value.~T();
+                }
+            }
+            else
+            {
+                if constexpr (!std::is_trivially_destructible_v<E>)
+                {
+                    m_Error.~E();
+                }
+            }
+        }
+        
+        // Operators
+        inline operator T& () { CheckConstructed(); return m_Value; }
+        inline operator const T& () const { CheckConstructed(); return m_Value; }
+        inline operator T* () { CheckConstructed(); return m_Value; }
+        inline operator const T* () const { CheckConstructed(); return m_Value; }
+
+        inline T* operator -> () { CheckConstructed(); return m_Value; }
+        inline const T* operator -> () const { CheckConstructed(); return m_Value; }
+
+        inline explicit operator bool() const { return m_HasValue; }
+        
+        // Value
+        inline T& Get() { CheckConstructed(); return m_Value; }
+        inline const T& Get() const { CheckConstructed(); return m_Value; }
+
+        // Error
+        inline E& Error() { ErrorPresent(); return m_Value; }
+        inline const E& Error() const { ErrorPresent(); return m_Value; }
+
+        // Getters
+        inline bool HasValue() const { return m_HasValue; }
+        inline bool HasError() const { return !m_HasValue; }
+
+        // Methods
+        template<typename TFunc, typename ...TArgs>
+        auto AndThen(TFunc&& f, TArgs&& ...args) & requires (std::invocable<TFunc, const T&, TArgs...>)
+        {
+            using Result = std::invoke_result_t<TFunc, T&, TArgs...>;
+            static_assert(std::is_same_v<typename _GetExpectedErrorType<Result>::Type, E>, "Mismatched error types");
+
+            if (m_HasValue)
+            {
+                return std::invoke(std::forward<TFunc>(f), m_Value, std::forward<TArgs>(args)...);
+            }
+
+            return Result(m_Error);
+        }
+
+        template<typename TFunc, typename ...TArgs>
+        auto AndThen(TFunc&& f, TArgs&& ...args) const& requires (std::invocable<TFunc, const T&, TArgs...>)
+        {
+            using Result = std::invoke_result_t<TFunc, const T&, TArgs...>;
+            static_assert(std::is_same_v<typename _GetExpectedErrorType<Result>::Type, E>, "Mismatched error types");
+
+            if (m_HasValue)
+            {
+                return std::invoke(std::forward<TFunc>(f), m_Value, std::forward<TArgs>(args)...);
+            }
+
+            return Result(m_Error);
+        }
+
+        template<typename TFunc, typename ...TArgs>
+        auto AndThen(TFunc&& f, TArgs&& ...args) && requires (std::invocable<TFunc, const T&, TArgs...>)
+        {
+            using Result = std::invoke_result_t<TFunc, const T&, TArgs...>;
+            static_assert(std::is_same_v<typename _GetExpectedErrorType<Result>::Type, E>, "Mismatched error types");
+
+            if (m_HasValue)
+            {
+                return std::invoke(std::forward<TFunc>(f), m_Value, std::forward<TArgs>(args)...);
+            }
+
+            return Result(m_Error);
+        }
+
+    private:
+        // Debug method
+        inline void CheckConstructed() const
+        {
+            #if defined(NANO_DEBUG_EXPECTED)
+            NANO_ASSERT(m_HasValue, "Object not constructed yet.");
+            #endif
+        }
+
+        inline void ErrorPresent() const
+        {
+            #if defined(NANO_DEBUG_EXPECTED)
+            NANO_ASSERT(!m_HasValue, "No error present.");
+            #endif
+        }
+
+    private:
+        union
+        {
+            T m_Value;
+            E m_Error;
+        };
+        bool m_HasValue;
+    };
+
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- Threading HPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+namespace Nano::Threading
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // AsyncMode
+    ////////////////////////////////////////////////////////////////////////////////////
+    enum class AsyncMode : uint8_t { Immediate = 0, Deferred };
+
+}
+
+namespace Nano::Internal::Threading
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // AsyncMode
+    ////////////////////////////////////////////////////////////////////////////////////
+    inline constexpr std::launch AsyncModeToLauch(Nano::Threading::AsyncMode mode)
+    {
+        switch (mode)
+        {
+        case Nano::Threading::AsyncMode::Immediate:  return std::launch::async;
+        case Nano::Threading::AsyncMode::Deferred:   return std::launch::deferred;
+        }
+
+        return std::launch::async;
+    }
+}
+
+namespace Nano::Threading // TODO: Add concurrency in the future
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Utilities
+    ////////////////////////////////////////////////////////////////////////////////////
+    inline uint64_t ID() { return std::hash<std::thread::id>()(std::this_thread::get_id()); }
+    inline uint32_t HardwareThreads() { return std::thread::hardware_concurrency(); }
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Async
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename TFunc, typename ...TArgs>
+    inline auto Async(AsyncMode mode, TFunc&& func, TArgs&& ...args) -> std::future<std::invoke_result_t<TFunc, TArgs...>> requires (std::invocable<TFunc, TArgs...>)
+    {
+        return std::async(Nano::Internal::Threading::AsyncModeToLauch(mode), std::forward<TFunc>(func), std::forward<TArgs>(args)...);
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // ThreadPool
+    ////////////////////////////////////////////////////////////////////////////////////
+    class ThreadPool
+    {
+    public:
+        // Constructor & Destructor
+        ThreadPool(uint32_t threadCount = HardwareThreads());
+        ~ThreadPool();
+
+        // Methods
+        template<typename TFunc, typename ...Args>
+        auto Enqueue(TFunc&& func, Args&& ...args) -> std::future<std::invoke_result_t<TFunc, Args...>> requires (std::invocable<TFunc, Args...>)
+        {
+            std::packaged_task<std::invoke_result_t<TFunc, Args...>()> task(std::forward<TFunc>(func), std::forward<Args>(args)...);
+            auto future = task.get_future();
+
+            std::move_only_function<void()> wrapper = [task = std::move(task)]() mutable { std::move(task)(); };
+            {
+                std::scoped_lock<std::mutex> lock(m_QueueMutex);
+                m_Tasks.push(std::move(wrapper));
+                m_TaskAvailable.notify_one();
+            }
+
+            return future;
+        }
+
+    private:
+        std::vector<std::thread> m_Threads;
+
+        std::queue<std::move_only_function<void()>> m_Tasks = {};
+
+        std::mutex m_QueueMutex = {};
+        std::condition_variable m_TaskAvailable = {};
+        bool m_Stop = false;
+    };
+
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- Threading CPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+#if defined(NANO_IMPL_THREADING)
+namespace Nano::Threading
+{
+    
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Constructor & Destructor
+    ////////////////////////////////////////////////////////////////////////////////////
+    ThreadPool::ThreadPool(uint32_t threadCount)
+    {
+        m_Threads.reserve(static_cast<size_t>(threadCount));
+        
+        for (size_t i = 0; i < threadCount; i++)
+        {
+            m_Threads.emplace_back([this] () 
+            {
+                while (true) 
+                {
+                    std::move_only_function<void()> task;
+                    
+                    {
+                        std::unique_lock<std::mutex> lock(m_QueueMutex);
+
+                        m_TaskAvailable.wait(lock, [this] { return !m_Tasks.empty() || m_Stop; });
+
+                        // Exit the thread if asked to stop and no tasks available
+                        if (m_Stop && m_Tasks.empty())
+                            return;
+
+                        // Get the next task from the queue
+                        task = std::move(m_Tasks.front());
+                        m_Tasks.pop();
+                    }
+
+                    task();
+                }
+            });
+        }
+    }
+
+    ThreadPool::~ThreadPool()
+    {
+        {
+            std::scoped_lock<std::mutex> lock(m_QueueMutex);
+            m_Stop = true;
+        }
+
+        // Notify all threads
+        m_TaskAvailable.notify_all();
+
+        // Wait for all tasks
+        for (auto& thread : m_Threads)
+            thread.join();
+    }
+
+}
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- Events HPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+namespace Nano::Events
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // EventDispatcher
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename TEventVariant> requires requires { typename std::variant_size<TEventVariant>::type; }
+    class EventDispatcher
+    {
+    public:
+        using SubscribeFn = std::function<void(TEventVariant& e)>;
+    public:
+        // Constructor & Destructor
+        EventDispatcher() { m_Subscribers.reserve(5); }
+        ~EventDispatcher() = default;
+
+        // Methods
+        void Dispatch(TEventVariant& e)
+        {
+            for (const auto& subscriber : m_Subscribers)
+                subscriber(e);
+        }
+
+        template<typename TFunc>
+        void Subscribe(TFunc&& func) requires(std::invocable<TFunc, TEventVariant&>)
+        {
+            m_Subscribers.emplace_back(std::forward<TFunc>(func));
+        }
+
+    private:
+        std::vector<SubscribeFn> m_Subscribers = {};
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // EventHandler
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename TEventVariant> requires requires { typename std::variant_size<TEventVariant>::type; }
+    class EventHandler
+    {
+    public:
+        // Constructor & Destructor
+        EventHandler(TEventVariant& e)
+            : m_Event(e) {}
+        ~EventHandler() = default;
+
+        // Methods
+        template<typename TEvent, typename TFunc>
+        void Handle(TFunc&& func)
+        {
+            if (std::holds_alternative<TEvent>(m_Event))
+                func(std::get<TEvent>(m_Event));
+        }
+
+    private:
+        TEventVariant& m_Event;
+    };
+
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- ECS HPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+namespace Nano::Internal::ECS
+{
+    
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Storage
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename ID, typename ...Components> requires(std::is_integral_v<ID>)
+    class Storage
+    {
+    public:
+        using TypesTuple = std::tuple<Components...>;
+        using StorageTuple = std::tuple<SparseSet<Components, ID>...>;
+    public:
+        // Constructor & Destructor
+        Storage() = default;
+        ~Storage() = default;
+
+        // Methods // TODO: Add requires InTuple
+        template<typename TComponent>
+        void AddComponent(ID id, const TComponent& component) requires(std::is_copy_constructible_v<TComponent>)
+        {
+            std::get<SparseSet<TComponent, ID>>(m_Components).Add(id, component);
+        }
+
+        template<typename TComponent>
+        void AddComponent(ID id, TComponent&& component) requires(std::is_move_constructible_v<TComponent>)
+        {
+            std::get<SparseSet<TComponent, ID>>(m_Components).Add(id, std::move(component));
+        }
+
+        template<typename TComponent, typename ...TArgs>
+        void AddComponent(ID id, TArgs&& ...args) requires(std::is_constructible_v<TComponent, TArgs...>)
+        {
+            std::get<SparseSet<TComponent, ID>>(m_Components).Add(id, std::forward<TArgs>(args)...);
+        }
+
+        template<typename TComponent>
+        void RemoveComponent(ID id)
+        {
+            std::get<SparseSet<TComponent, ID>>(m_Components).Remove(id);
+        }
+
+        // Getters
+        template<typename TComponent>
+        bool HasComponent(ID id) const
+        {
+            return std::get<SparseSet<TComponent, ID>>(m_Components).Has(id);
+        }
+
+        template<typename TComponent>
+        TComponent& GetComponent(ID id)
+        {
+            return std::get<SparseSet<TComponent, ID>>(m_Components).Get(id);
+        }
+
+        template<typename TComponent>
+        const TComponent& GetComponent(ID id) const
+        {
+            return std::get<SparseSet<TComponent, ID>>(m_Components).Get(id);
+        }
+
+        // Internal
+        template<typename TComponent>
+        inline SparseSet<TComponent, ID>& GetSparseSet() { return std::get<SparseSet<TComponent, ID>>(); }
+        template<typename TComponent>
+        inline const SparseSet<TComponent, ID>& GetSparseSet() const { return std::get<SparseSet<TComponent, ID>>(); }
+
+    private:
+        StorageTuple m_Components;
+    };
+
+}
+
+namespace Nano::ECS
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Registry
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename ID, typename ...Components> requires(std::is_integral_v<ID>)
+    class Registry // Note: We have to predefine the components to avoid the V-table
+    {
+    public:
+        // Constructor & Destructor
+        Registry() = default;
+        ~Registry() = default;
+
+        // Methods
+        template<typename TComponent>
+        void AddComponent(ID id, const TComponent& component) requires(std::is_copy_constructible_v<TComponent>) { m_Storage.AddComponent<TComponent>(id, component); }
+        template<typename TComponent>
+        void AddComponent(ID id, TComponent&& component) requires(std::is_move_constructible_v<TComponent>) { m_Storage.AddComponent<TComponent>(id, std::move(component)); }
+        template<typename TComponent, typename ...TArgs>
+        void AddComponent(ID id, TArgs&& ...args) requires(std::is_constructible_v<TComponent, TArgs...>) { m_Storage.AddComponent<TComponent>(id, std::forward<TArgs>(args)...); }
+
+        template<typename TComponent>
+        void RemoveComponent(ID id) { m_Storage.RemoveComponent<TComponent>(id); }
+
+        // Getters
+        template<typename TComponent>
+        bool HasComponent(ID id) const { return m_Storage.HasComponent<TComponent>(id); }
+
+        template<typename TComponent>
+        TComponent& GetComponent(ID id) { return m_Storage.GetComponent<TComponent>(id); }
+        template<typename TComponent>
+        const TComponent& GetComponent(ID id) const { return m_Storage.GetComponent<TComponent>(id); }
+
+        // Views
+        template<typename ...ViewComponents>
+        auto View()
+        {
+            // TODO: Receive primary somehow
+            Types::ForEachTypeInTuple<std::tuple<ViewComponents...>>([&]<typename T>() {  });
+            
+            /*
+            auto& others = std::forward_as_tuple(Get<Comps>()...);
+
+            // 2+3. Filter & transform in one pipeline:
+            return primary.entities()
+                | std::views::filter([&](ID id) {
+                // keep only e’s that exist in *all* comps
+                return (... && std::get<Comps&>(others).has(e));
+                    })
+                | std::views::transform([&](ID id) {
+                // turn e into a tuple<T&,V&,O&…>
+                return std::tuple{ std::get<Comps&>(others).get(e)... };
+                    });
+            */
+        }
+
+        // Operators
+
+        // Iterators // TODO: std::ranges::views::zip();
+
+    private:
+        Internal::ECS::Storage<ID, Components...> m_Storage;
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Specialization for Components Tuple
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename ID, typename... Components>
+    class Registry<ID, std::tuple<Components...>> : public Registry<ID, Components...>
+    {
+    public:
+        using Registry<ID, Components...>::Registry;
+    };
+
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- Tests HPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+namespace Nano::Internal
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Test
+    ////////////////////////////////////////////////////////////////////////////////////
+    struct Test
+    {
+    public:
+        using Function = void (*)();
+    public:
+        std::string_view Name = {};
+        Function TestFunction = nullptr;
+
+    public:
+        Test() = default;
+        inline Test(std::string_view name, Function function)
+            : Name(name), TestFunction(function) {}
+        ~Test() = default;
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // ExpressionDetails
+    ////////////////////////////////////////////////////////////////////////////////////
+    struct ExpressionDetails
+    {
+    public:
+        const char* File = nullptr;
+        int Line = 0;
+
+    public:
+        ExpressionDetails() = default;
+        inline ExpressionDetails(const char* file, int line)
+            : File(file), Line(line) {}
+        ~ExpressionDetails() = default;
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // TestRegistry
+    ////////////////////////////////////////////////////////////////////////////////////
+    class TestRegistry : public Nano::Traits::NoCopy, public Nano::Traits::NoMove
+    {
+    public:
+        // Constructor & Destructor
+        TestRegistry() = default;
+        ~TestRegistry() = default;
+
+        // Methods
+        void Run();
+        
+        inline void AddTest(std::string_view name, Test::Function function) { m_Tests.emplace_back(name, function); }
+
+        // Internal methods
+        bool Bool(const char* file, int line, const char* expressionStr, bool expression); // Has to be true
+
+        template<typename T, typename T2>
+        bool Equals(const char* file, int line, const char* leftStr, const char* rightStr, bool expression, T left, T2 right) // Has to be true
+        {
+            if (!expression)
+            {
+                m_ExpressionDetails = ExpressionDetails(file, line);
+
+                if constexpr (std::formattable<T, char> && std::formattable<T2, char>)
+                {
+                    m_ExpressionFailString = Nano::Text::Format("{0}({1}, {2}); Left = {3}, Right = {4}", "NANO_TEST_EQUALS", leftStr, rightStr, left, right);
+                }
+                else
+                {
+                    m_ExpressionFailString = Nano::Text::Format("{0}({1}, {2});", "NANO_TEST_EQUALS", leftStr, rightStr);
+                }
+            }
+
+            return expression;
+        }
+
+        // Static methods
+        static TestRegistry& Get();
+
+    private:
+        Test* m_ActiveTest = nullptr;
+
+        ExpressionDetails m_ExpressionDetails = {};
+        std::string m_ExpressionFailString = {};
+
+        size_t m_CurrentTest = 1;
+        std::vector<Test> m_Tests = { };
+    };
+
+}
+
+// Test case
+#define NANO_TEST_CASE_HELPER2(identifier, name)                                                                             \
+    void _TestFn##identifier();                                                                                                 \
+    inline void _TestAdd##identifier() { ::Nano::Internal::TestRegistry::Get().AddTest(name, &_TestFn##identifier); }        \
+    NANO_RUN_FUNCTION(_TestAdd##identifier)                                                                                  \
+    void _TestFn##identifier()
+
+#define NANO_TEST_CASE_HELPER(identifier, name)                      NANO_TEST_CASE_HELPER2(identifier, name)
+#define NANO_TEST_CASE(name)                                         NANO_TEST_CASE_HELPER(__COUNTER__, name)
+
+// Test bool/require
+#define NANO_TEST_BOOL_HELPER2(identifier, expr, line, file)                                                                 \
+    bool _BoolResult##identifier =    ::Nano::Internal::TestRegistry::Get().Bool(file, line, #expr, expr);                   \
+    if (!_BoolResult##identifier)     return                                                                                  
+
+#define NANO_TEST_BOOL_HELPER(identifier, expr, line, file)          NANO_TEST_BOOL_HELPER2(identifier, expr, line, file)
+#define NANO_TEST_BOOL(expr)                                         NANO_TEST_BOOL_HELPER(__COUNTER__, expr, __LINE__, __FILE__)
+#define NANO_TEST_REQUIRE(expr)                                      NANO_TEST_BOOL(expr)
+#define NANO_TEST_EXPECT(expr)                                       NANO_TEST_BOOL(expr)
+
+// Test equals
+#define NANO_TEST_EQUALS_HELPER2(identifier, one, two, line, file)                                                           \
+    auto _EqualsLeft##identifier =      one;                                                                                    \
+    auto _EqualsRight##identifier =     two;                                                                                    \
+    bool _EqualsResult##identifier =    ::Nano::Internal::TestRegistry::Get().Equals(file, line, #one, #two, (_EqualsLeft##identifier == _EqualsRight##identifier), _EqualsLeft##identifier, _EqualsRight##identifier);  \
+    if (!_EqualsResult##identifier)     return
+
+#define NANO_TEST_EQUALS_HELPER(identifier, one, two, line, file)    NANO_TEST_EQUALS_HELPER2(identifier, one, two, line, file)
+#define NANO_TEST_EQUALS(left, right)                                NANO_TEST_EQUALS_HELPER(__COUNTER__, left, right, __LINE__, __FILE__)
+
+// Test main
+#define NANO_TEST_MAIN()                                     \
+    int main(int, char**)                                       \
+    {                                                           \
+        ::Nano::Internal::TestRegistry::Get().Run();         \
+        return 0;                                               \
+    }
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- Tests CPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+#if defined(NANO_IMPL_TESTS)
+namespace Nano::Internal
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Methods
+    ////////////////////////////////////////////////////////////////////////////////////
+    void TestRegistry::Run()
+    {
+        // Strings
+        constexpr std::string_view start = "[TESTS] - Results .............. ";
+        constexpr std::string_view part1 = "result: ... ";
+        constexpr std::string_view end = "message:";
+
+        Nano::Log::PrintLn("{0}{1}{2}", start, part1, end);
+
+        for (auto& test : m_Tests)
+        {
+            m_ActiveTest = &test;
+            m_ExpressionFailString.clear();
+            
+            test.TestFunction();
+
+            // Output
+            std::string fileStr = {};
+
+            if (!m_ExpressionFailString.empty())
+            {
+                std::filesystem::path file = std::filesystem::path(m_ExpressionDetails.File).filename();
+                std::filesystem::path filename = file.filename();
+                fileStr = filename.string();
+            }
+            
+            std::string first = Nano::Text::Format("    ({0}) - ", test.Name);
+            NANO_ASSERT((first.size() <= start.size()), "Name of Test is too long");
+            std::string second = std::string(start.size() - first.size(), ' ') + (!m_ExpressionFailString.empty() ? 
+                Nano::Text::Format("{0}failed{1}", Nano::Log::Colour::BrightRedFG, Nano::Log::Colour::Reset) : 
+                Nano::Text::Format("{0}passed{1}", Nano::Log::Colour::BrightGreenFG, Nano::Log::Colour::Reset)
+            );
+            
+            size_t sizeBegin = start.size() + part1.size() - first.size();
+            size_t size = sizeBegin - (second.size() - (!m_ExpressionFailString.empty() ?
+                Nano::Log::Colour::BrightRedFG.size() :
+                Nano::Log::Colour::BrightGreenFG.size()
+            ) - Nano::Log::Colour::Reset.size());
+            std::string third = std::string(size, ' ') + (!m_ExpressionFailString.empty() ? 
+                Nano::Text::Format("{0} in {1}:{2}", m_ExpressionFailString, fileStr, m_ExpressionDetails.Line) :
+                ""
+            );
+
+            Nano::Log::PrintLn("{0}{1}{2}", first, second, third);
+            m_CurrentTest++;
+        }
+
+        Nano::Log::PrintLn("");
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Internal methods
+    ////////////////////////////////////////////////////////////////////////////////////
+    bool TestRegistry::Bool(const char* file, int line, const char* expressionStr, bool expression)
+    {
+        if (!expression)
+        {
+            m_ExpressionDetails = ExpressionDetails(file, line);
+            m_ExpressionFailString = Nano::Text::Format("{0}({1});", "NANO_TEST_BOOL", expressionStr);
+        }
+
+        return expression;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Static methods
+    ////////////////////////////////////////////////////////////////////////////////////
+    TestRegistry& TestRegistry::Get()
+    {
+        static TestRegistry s_Tests;
+        return s_Tests;
+    }
+
+}
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- Benchmark HPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+namespace Nano::Internal
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // BenchmarkResults
+    ////////////////////////////////////////////////////////////////////////////////////
+    struct BenchmarkResults
+    {
+    public:
+        std::string_view Name = {};
+
+        // Times are in nanoseconds
+        uint64_t Mean = 0;
+        uint64_t Median = 0;
+        uint64_t Iterations = 0;
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Benchmark
+    ////////////////////////////////////////////////////////////////////////////////////
+    struct Benchmark
+    {
+    public:
+        using Function = void (*)();
+    public:
+        std::string_view Name = {};
+        Function BenchmarkFunction = nullptr;
+
+    public:
+        Benchmark() = default;
+        inline Benchmark(std::string_view name, Function function)
+            : Name(name), BenchmarkFunction(function) {}
+        ~Benchmark() = default;
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // BenchmarkPart
+    ////////////////////////////////////////////////////////////////////////////////////
+    struct BenchmarkPart
+    {
+    public:
+        enum class Type : uint8_t { None = 0, Timeout, Iterations };
+        using Function = std::function<void()>;
+    public:
+        Type PartType = Type::None;
+        std::string_view Name = {};
+        Function PartFunction = nullptr;
+
+        uint64_t Count = 0;
+
+    public:
+        // Constructors & Destructor
+        BenchmarkPart() = default;
+        inline BenchmarkPart(Type type, std::string_view name, uint64_t count)
+            : PartType(type), Name(name), Count(count) {}
+        ~BenchmarkPart();
+
+        // Operators
+        inline operator bool() const { return true; }
+        inline BenchmarkPart& operator = (Function function)
+        {
+            PartFunction = function;
+            return *this;
+        }
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // BenchmarkRegistry
+    ////////////////////////////////////////////////////////////////////////////////////
+    class BenchmarkRegistry
+    {
+    public:
+        // Constructor & Destructor
+        BenchmarkRegistry() = default;
+        ~BenchmarkRegistry() = default;
+
+        // Methods
+        void Run();
+
+        inline void AddBenchmark(std::string_view name, Benchmark::Function function) { m_Benchmarks.emplace_back(name, function); }
+        inline void AddResult(std::string_view name, uint64_t mean, uint64_t median, uint64_t iterations) { m_Results[m_ActiveBenchmark].emplace_back(name, mean, median, iterations); }
+
+        // Static methods
+        static BenchmarkRegistry& Get();
+
+    private:
+        size_t m_ActiveBenchmark = 0;
+
+        std::vector<Benchmark> m_Benchmarks = { };
+        std::vector<std::vector<BenchmarkResults>> m_Results = { };
+    };
+
+}
+
+// Bench init
+#define NANO_BENCHMARK_INIT_HELPER2(identifier, name)                                                                                \
+    void _BenchFn##identifier();                                                                                                        \
+    inline void _BenchAdd##identifier() { ::Nano::Internal::BenchmarkRegistry::Get().AddBenchmark(name, &_BenchFn##identifier); }    \
+    NANO_RUN_FUNCTION(_BenchAdd##identifier)                                                                                         \
+    void _BenchFn##identifier()
+
+#define NANO_BENCHMARK_INIT_HELPER(identifier, name)        NANO_BENCHMARK_INIT_HELPER2(identifier, name)
+#define NANO_BENCHMARK_INIT(name)                           NANO_BENCHMARK_INIT_HELPER(__COUNTER__, name)
+
+// Bench iterations
+#define NANO_BENCHMARK_ITERATIONS_HELPER2(identifier, name, iterations)                                                              \
+    if (::Nano::Internal::BenchmarkPart part{::Nano::Internal::BenchmarkPart::Type::Iterations, name, iterations})                \
+        part = [&]() 
+
+#define NANO_BENCHMARK_ITERATIONS_HELPER(identifier, name, iterations)   NANO_BENCHMARK_ITERATIONS_HELPER2(identifier, name, iterations)
+#define NANO_BENCHMARK_ITERATIONS(name, iterations)                      NANO_BENCHMARK_ITERATIONS_HELPER(__COUNTER__, name, iterations)
+
+// Bench timeout
+#define NANO_BENCHMARK_TIMEOUT_HELPER2(identifier, name, milliseconds)                                                               \
+    if (::Nano::Internal::BenchmarkPart part{::Nano::Internal::BenchmarkPart::Type::Timeout, name, milliseconds})                 \
+        part = [&]() 
+
+#define NANO_BENCHMARK_TIMEOUT_HELPER(identifier, name, milliseconds)    NANO_BENCHMARK_TIMEOUT_HELPER2(identifier, name, milliseconds)
+#define NANO_BENCHMARK_TIMEOUT(name, milliseconds)                       NANO_BENCHMARK_TIMEOUT_HELPER(__COUNTER__, name, milliseconds)
+
+#define NANO_BENCHMARK_AUTO(name)                                        NANO_BENCHMARK_TIMEOUT(name, 2000)
+
+// Bench main
+#define NANO_BENCHMARK_MAIN()                                \
+    int main(int, char**)                                       \
+    {                                                           \
+        ::Nano::Internal::BenchmarkRegistry::Get().Run();    \
+        return 0;                                               \
+    }
+
+#define NANO_TEST_BENCHMARK_MAIN()                           \
+    int main(int, char**)                                       \
+    {                                                           \
+        ::Nano::Internal::TestRegistry::Get().Run();         \
+        ::Nano::Internal::BenchmarkRegistry::Get().Run();    \
+        return 0;                                               \
+    }
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- Benchmark CPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+#if defined(NANO_IMPL_BENCHMARKS)
+namespace Nano::Internal
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Destructor
+    ////////////////////////////////////////////////////////////////////////////////////
+    BenchmarkPart::~BenchmarkPart()
+    {
+        // Note: This static_assert is in the function to only call it when the functionality of this class is used.
+        static_assert(std::chrono::high_resolution_clock::is_steady, "High resolution clock not steady on this platform.");
+
+        std::vector<uint64_t> times;
+        
+        // Timing
+        switch (PartType)
+        {
+        case Type::Timeout:
+        {
+            auto start = std::chrono::high_resolution_clock::now();
+            auto timeoutStart = std::chrono::high_resolution_clock::now();
+            while (std::chrono::duration_cast<std::chrono::duration<uint64_t, std::chrono::milliseconds::period>>(std::chrono::high_resolution_clock::now() - timeoutStart).count() < Count)
+            {
+                start = std::chrono::high_resolution_clock::now();
+
+                PartFunction();
+
+                times.push_back(std::chrono::duration_cast<std::chrono::duration<uint64_t, std::chrono::nanoseconds::period>>(std::chrono::high_resolution_clock::now() - start).count());
+            }
+            break;
+        }
+        case Type::Iterations:
+        {
+            times.resize(Count);
+
+            auto start = std::chrono::high_resolution_clock::now();
+            for (size_t i = 0; i < Count; i++)
+            {
+                start = std::chrono::high_resolution_clock::now();
+
+                PartFunction();
+
+                times[i] = std::chrono::duration_cast<std::chrono::duration<uint64_t, std::chrono::nanoseconds::period>>(std::chrono::high_resolution_clock::now() - start).count();
+            }
+            break;
+        }
+
+        default:
+            NANO_ASSERT(false, "Invalid BenchmarkPart::Type.");
+            break;
+        }
+
+        // Sorting
+        {
+            std::ranges::sort(times); // Sorts in ascending order
+        }
+        // Output
+        {
+            uint64_t median = times[static_cast<size_t>(std::ceilf(static_cast<float>(times.size()) / 2.0f))];
+            uint64_t mean = std::accumulate(times.begin(), times.end(), 0ull) / times.size();
+            uint64_t iterations = times.size();
+
+            BenchmarkRegistry::Get().AddResult(Name, mean, median, iterations);
+        }
+    }
+    
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Methods
+    ////////////////////////////////////////////////////////////////////////////////////
+    void BenchmarkRegistry::Run()
+    {
+        // Strings
+        constexpr std::string_view start = "[BENCHMARK] - Results .......... ";
+        constexpr std::string_view part1 = "mean: ..... ";
+        constexpr std::string_view part2 = "median: ... ";
+        constexpr std::string_view end = "iterations:";
+
+        Nano::Log::PrintLn("{0}{1}{2}{3}", start, part1, part2, end);
+
+        m_Results.resize(m_Benchmarks.size());
+        for (; m_ActiveBenchmark < m_Benchmarks.size(); m_ActiveBenchmark++)
+        {
+            m_Benchmarks[m_ActiveBenchmark].BenchmarkFunction();
+
+            for (const auto& result : m_Results[m_ActiveBenchmark])
+            {
+                // Time to string
+                auto toStr = [](uint64_t time) -> std::string
+                {
+                    constexpr std::string_view floatPointFormat = "00.00";
+
+                    uint8_t numCount = Nano::Maths::CountNumbers(time);
+                    std::string numStr = Nano::Maths::ToString(time);
+
+                    if (numCount > 6)
+                    {
+                        numStr.insert(static_cast<size_t>(numCount) - 6, ".");
+                        numStr = numStr.substr(0, floatPointFormat.size()) + "ms";
+                    }
+                    else if (numCount > 3)
+                    {
+                        numStr.insert(static_cast<size_t>(numCount) - 3, ".");
+                        numStr = numStr.substr(0, floatPointFormat.size()) + "us"; // µs
+                    }
+                    else
+                    {
+                        numStr = numStr + "ns";
+                    }
+
+                    return numStr;
+                };
+
+                // Values
+                std::string meanStr = toStr(result.Mean);
+                std::string medianStr = toStr(result.Median);
+                std::string iterationsStr = Nano::Maths::ToString(result.Iterations);
+
+                // Output
+                std::string first = Nano::Text::Format("    ({0}:{1}) - ", m_Benchmarks[m_ActiveBenchmark].Name, result.Name);
+                NANO_ASSERT((first.size() <= start.size()), "Name of Benchmark is too long");
+                std::string second = std::string(start.size() - first.size(), ' ') + meanStr;
+                std::string third = std::string(start.size() + part1.size() - first.size() - second.size(), ' ') + medianStr;
+                std::string fourth = std::string(start.size() + part1.size() + part2.size() - first.size() - second.size() - third.size(), ' ') + iterationsStr;
+
+                Nano::Log::PrintLn("{0}{1}{2}{3}", first, second, third, fourth);
+            }
+
+            Nano::Log::PrintLn("");
+        }
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Static methods
+    ////////////////////////////////////////////////////////////////////////////////////
+    BenchmarkRegistry& BenchmarkRegistry::Get()
+    {
+        static BenchmarkRegistry s_Benchmarks;
+        return s_Benchmarks;
+    }
+
+}
+#endif
