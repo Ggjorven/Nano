@@ -227,7 +227,7 @@ namespace Nano
         ////////////////////////////////////////////////////////////////////////////////////
         // Print
         ////////////////////////////////////////////////////////////////////////////////////
-        template <typename... TArgs>
+        template<typename... TArgs>
         inline void Print(std::string_view msg)
         {
             std::cout << msg << Colour::Reset;
@@ -252,7 +252,7 @@ namespace Nano
         enum class Level : uint8_t { Trace, Info, Warn, Error, Fatal };
 
         template<Level level>
-        constexpr std::string_view LevelTag()
+        [[nodiscard]] consteval std::string_view LevelTag() noexcept(true)
         {
             if constexpr (level == Level::Trace)
                 return "T";
@@ -314,7 +314,7 @@ namespace Nano::Text
     // Utility
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename ...Args>
-    std::string Format(std::format_string<Args...> fmt, Args&& ...args)
+    [[nodiscard]] std::string Format(std::format_string<Args...> fmt, Args&& ...args)
     {
         return std::format(fmt, std::forward<Args>(args)...);
     }
@@ -335,23 +335,23 @@ namespace Nano::Traits
     struct NoCopy
     {
     public:
-        NoCopy() = default;
-        NoCopy(const NoCopy&) = delete;
-        NoCopy& operator=(const NoCopy&) = delete;
+        constexpr NoCopy() noexcept(true) = default;
+        constexpr NoCopy(const NoCopy&) noexcept(true) = delete;
+        constexpr NoCopy& operator = (const NoCopy&) noexcept(true) = delete;
     };
 
     struct NoMove
     {
     public:
-        NoMove() = default;
-        NoMove(NoMove&&) = delete;
-        NoMove& operator = (NoMove&&) = delete;
+        constexpr NoMove() noexcept(true) = default;
+        constexpr NoMove(NoMove&&) noexcept(true) = delete;
+        constexpr NoMove& operator = (NoMove&&) noexcept(true) = delete;
     };
 
     struct NoConstruct
     {
     public:
-        NoConstruct() = delete;
+        constexpr NoConstruct() noexcept(true) = delete;
     };
 
 }
@@ -367,11 +367,11 @@ namespace Nano
     ////////////////////////////////////////////////////////////////////////////////////
     // Hash
     ////////////////////////////////////////////////////////////////////////////////////
-    class Hash
+    class Hash final : public Traits::NoConstruct
     {
     public:
         // String hashing
-        static constexpr uint64_t fnv1(const std::string_view str)
+        [[nodiscard]] static constexpr uint64_t fnv1(const std::string_view str) noexcept(true)
         {
             uint64_t hash = 14695981039346656037ULL;
             for (char c : str)
@@ -383,7 +383,7 @@ namespace Nano
             return hash;
         }
 
-        static constexpr uint64_t fnv1a(const std::string_view str)
+        [[nodiscard]] static constexpr uint64_t fnv1a(const std::string_view str) noexcept(true)
         {
             uint64_t hash = 14695981039346656037ULL;
             for (char c : str)
@@ -395,7 +395,7 @@ namespace Nano
             return hash;
         }
 
-        static constexpr uint64_t djb2(const std::string_view str)
+        [[nodiscard]] static constexpr uint64_t djb2(const std::string_view str) noexcept(true)
         {
             uint64_t hash = 5381;
             for (char c : str)
@@ -404,7 +404,7 @@ namespace Nano
             return hash;
         }
 
-        static constexpr uint64_t sdbm(const std::string_view str)
+        [[nodiscard]] static constexpr uint64_t sdbm(const std::string_view str) noexcept(true)
         {
             uint64_t hash = 0;
             for (char c : str)
@@ -413,7 +413,7 @@ namespace Nano
             return hash;
         }
 
-        static constexpr uint32_t crc32(const std::string_view str)
+        [[nodiscard]] static constexpr uint32_t crc32(const std::string_view str) noexcept(true)
         {
             uint32_t crc = 0xFFFFFFFF;
             for (char c : str)
@@ -426,7 +426,7 @@ namespace Nano
             return ~crc;
         }
 
-        static constexpr uint64_t murmur64(const std::string_view str, uint64_t seed = 0xc70f6907UL)
+        [[nodiscard]] static constexpr uint64_t murmur64(const std::string_view str, uint64_t seed = 0xc70f6907UL) noexcept(true)
         {
             uint64_t hash = seed ^ (str.size() * 0xc6a4a7935bd1e995);
             for (char c : str)
@@ -447,7 +447,7 @@ namespace Nano
         }
 
         // Integer hashing
-        static constexpr uint64_t UInt64(uint64_t x)
+        [[nodiscard]] static constexpr uint64_t UInt64(uint64_t x) noexcept(true)
         {
             x ^= x >> 33;
             x *= 0xff51afd7ed558ccdULL;
@@ -460,7 +460,7 @@ namespace Nano
 
     public:
         // Helper functions
-        static constexpr uint64_t Combine(const uint64_t hash1, const uint64_t hash2)
+        [[nodiscard]] static constexpr uint64_t Combine(const uint64_t hash1, const uint64_t hash2) noexcept(true)
         {
             uint64_t combined = hash1 + 0x9e3779b97f4a7c15;
             combined = (combined ^ (hash2 >> 30)) * 0xbf58476d1ce4e5b9;
@@ -484,14 +484,14 @@ namespace Nano
     // DeferredConstruct<T>
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename T, bool Destroyable = false>
-    class DeferredConstruct : public Traits::NoCopy, public Traits::NoMove
+    class DeferredConstruct final : public Traits::NoCopy, public Traits::NoMove
     {
     public:
         using ValueType = T;
     public:
         // Constructor & Destructor
-        DeferredConstruct() = default;
-        inline ~DeferredConstruct()
+        DeferredConstruct() noexcept(true) = default;
+        inline ~DeferredConstruct() noexcept(std::is_nothrow_destructible_v<T>)
         {
             if constexpr (!std::is_trivially_destructible_v<T>)
             {
@@ -512,21 +512,21 @@ namespace Nano
         }
 
         // Operators
-        inline operator T& () { CheckConstructed(); return *reinterpret_cast<T*>(m_Storage); }
-        inline operator const T& () const { CheckConstructed(); return *reinterpret_cast<const T*>(m_Storage); }
-        inline operator T* () { CheckConstructed(); return reinterpret_cast<T*>(m_Storage); }
-        inline operator const T* () const { CheckConstructed(); return reinterpret_cast<const T*>(m_Storage); }
+        inline operator T& ()               noexcept(true) { CheckConstructed(); return *reinterpret_cast<T*>(m_Storage); }
+        inline operator const T& () const   noexcept(true) { CheckConstructed(); return *reinterpret_cast<const T*>(m_Storage); }
+        inline operator T* ()               noexcept(true) { CheckConstructed(); return reinterpret_cast<T*>(m_Storage); }
+        inline operator const T* () const   noexcept(true) { CheckConstructed(); return reinterpret_cast<const T*>(m_Storage); }
 
-        inline T* operator -> () { CheckConstructed(); return reinterpret_cast<T*>(m_Storage); }
-        inline const T* operator -> () const { CheckConstructed(); return reinterpret_cast<const T*>(m_Storage); }
+        inline T* operator -> ()                { CheckConstructed(); return reinterpret_cast<T*>(m_Storage); }
+        inline const T* operator -> () const    { CheckConstructed(); return reinterpret_cast<const T*>(m_Storage); }
 
         // Getters
-        inline T& Get() { CheckConstructed(); return *reinterpret_cast<T*>(m_Storage); }
-        inline const T& Get() const { CheckConstructed(); return *reinterpret_cast<const T*>(m_Storage); }
+        [[nodiscard]] inline T& Get()               noexcept(true) { CheckConstructed(); return *reinterpret_cast<T*>(m_Storage); }
+        [[nodiscard]] inline const T& Get() const   noexcept(true) { CheckConstructed(); return *reinterpret_cast<const T*>(m_Storage); }
 
         // Methods
         template<typename ...Args>
-        inline void Construct(Args&& ...args)
+        inline void Construct(Args&& ...args) noexcept(std::is_nothrow_constructible_v<T, Args...>)
         {
             #if defined(NANO_DEBUG_DEFERREDCONSTRUCT)
             if (m_Constructed) [[unlikely]]
@@ -542,7 +542,7 @@ namespace Nano
             new (m_Storage) T(std::forward<Args>(args)...);
         }
 
-        inline void Destroy() requires(Destroyable)
+        inline void Destroy() noexcept(std::is_nothrow_destructible_v<T>) requires(Destroyable)
         {
             CheckConstructed();
 
@@ -558,7 +558,7 @@ namespace Nano
 
     private:
         // Debug method
-        inline void CheckConstructed() const
+        inline void CheckConstructed() const noexcept(true)
         {
             #if defined(NANO_DEBUG_DEFERREDCONSTRUCT)
             NANO_ASSERT(m_Constructed, "Object not constructed yet."); // Object not constructed yet.
@@ -590,14 +590,14 @@ namespace Nano
     // SparseSet<T>
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename T, typename ID = uint64_t> requires(std::is_integral_v<ID>)
-    class SparseSet : public Traits::NoCopy
+    class SparseSet final : public Traits::NoCopy
     {
     public:
         static constexpr ID InvalidID = std::numeric_limits<ID>::max();
     public:
         // Constructor & Destructor
         SparseSet() = default;
-        ~SparseSet() = default;
+        ~SparseSet() noexcept(std::is_nothrow_destructible_v<T>) = default;
 
         // Methods
         void Add(ID id, const T& value) requires(std::is_copy_constructible_v<T>)
@@ -637,7 +637,7 @@ namespace Nano
             m_Values.emplace_back(std::forward<Args>(args)...);
         }
 
-        void Remove(ID id)
+        void Remove(ID id) noexcept(true)
         {
             using std::swap;
 
@@ -660,22 +660,22 @@ namespace Nano
         }
 
         // Getters
-        inline bool Has(ID id) const { return id < m_Sparse.size() && m_Sparse[id] != InvalidID && m_Sparse[id] < m_IDs.size() && m_IDs[m_Sparse[id]] == id; }
+        inline bool Has(ID id) const noexcept(true) { return id < m_Sparse.size() && m_Sparse[id] != InvalidID && m_Sparse[id] < m_IDs.size() && m_IDs[m_Sparse[id]] == id; }
 
-        inline T& Get(ID id) { NANO_ASSERT(Has(id), "No value present by this ID."); return m_Values[m_Sparse[id]]; }
-        inline const T& Get(ID id) const { NANO_ASSERT(Has(id), "No value present by this ID."); return m_Values[m_Sparse[id]]; }
+        inline T& Get(ID id)                noexcept(true) { NANO_ASSERT(Has(id), "No value present by this ID."); return m_Values[m_Sparse[id]]; }
+        inline const T& Get(ID id) const    noexcept(true) { NANO_ASSERT(Has(id), "No value present by this ID."); return m_Values[m_Sparse[id]]; }
 
-        inline size_t Size() const { return m_IDs.size(); }
-        inline std::vector<ID>& GetIDs() { return m_IDs; }
-        inline const std::vector<ID>& GetIDs() const { return m_IDs; }
-        inline std::vector<T>& GetValues() { return m_Values; }
-        inline const std::vector<T>& GetValues() const { return m_Values; }
+        inline size_t Size()                        const   noexcept(true) { return m_IDs.size(); }
+        inline std::vector<ID>& GetIDs()                    noexcept(true) { return m_IDs; }
+        inline const std::vector<ID>& GetIDs()      const   noexcept(true) { return m_IDs; }
+        inline std::vector<T>& GetValues()                  noexcept(true) { return m_Values; }
+        inline const std::vector<T>& GetValues()    const   noexcept(true) { return m_Values; }
 
         // Iterators
-        inline auto begin()         { return m_Values.begin(); }
-        inline auto end()           { return m_Values.end(); }
-        inline auto begin() const   { return m_Values.begin(); }
-        inline auto end()   const   { return m_Values.end(); }
+        inline auto begin()       noexcept(true)    { return m_Values.begin(); }
+        inline auto end()         noexcept(true)    { return m_Values.end(); }
+        inline auto begin() const noexcept(true)    { return m_Values.begin(); }
+        inline auto end()   const noexcept(true)    { return m_Values.end(); }
 
     private:
         std::vector<ID> m_Sparse = { };
@@ -687,18 +687,18 @@ namespace Nano
     // StaticString<N>
     ////////////////////////////////////////////////////////////////////////////////////
     template<size_t N>
-    struct StaticString
+    struct StaticString final
     {
     public:
         // Constructor & Destructor
-        constexpr StaticString(std::string_view sv) noexcept
+        constexpr StaticString(std::string_view sv) noexcept(true)
         {
             std::copy(sv.begin(), sv.end(), m_Content.data());
         }
-        constexpr ~StaticString() = default;
+        constexpr ~StaticString() noexcept(true) = default;
 
         // Operators
-        constexpr operator std::string_view() const noexcept { return { m_Content.data(), N }; }
+        constexpr operator std::string_view() const noexcept(true) { return { m_Content.data(), N }; }
 
     private:
         std::array<char, N + 1> m_Content = {};
@@ -723,12 +723,12 @@ namespace Nano::Internal::Types
     // Internal naming
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename T>
-    struct ConstexprName
+    struct ConstexprName final : public Nano::Traits::NoConstruct
     {
     public:
         inline constexpr static const std::string_view Invalid = "1nvalid";
     public:
-        constexpr static std::string_view TypeNameImpl()
+        consteval static std::string_view TypeNameImpl() noexcept(true)
         {
             constexpr std::string_view fn = FunctionSignatureImpl();
 
@@ -796,7 +796,7 @@ namespace Nano::Internal::Types
             #endif
         }
 
-        constexpr static std::string_view FunctionSignatureImpl()
+        consteval static std::string_view FunctionSignatureImpl() noexcept(true)
         {
             #if defined(NANO_COMPILER_MSVC)
                 return { __FUNCSIG__, sizeof(__FUNCSIG__) };
@@ -822,7 +822,7 @@ namespace Nano::Internal::Types
     using TupleIndexedType = std::tuple_element_t<Index, Tuple>;
 
     template<typename T, typename Tuple, size_t Index = 0>
-    constexpr size_t TupleTypeToIndex()
+    consteval size_t TupleTypeToIndex() noexcept(true)
     {
         if constexpr (Index < TupleTypeCount<Tuple> && std::is_same_v<T, TupleIndexedType<Index, Tuple>>) 
         {
@@ -860,7 +860,7 @@ namespace Nano::Types
     // Name
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename T>
-    constexpr std::string_view Name()
+    consteval std::string_view Name() noexcept(true)
     {
         return Nano::Internal::Types::ConstexprName<T>::TypeName;
     }
@@ -920,7 +920,7 @@ namespace Nano::Internal::Enum
     ////////////////////////////////////////////////////////////////////////////////////
     #if defined(NANO_COMPILER_MSVC)
     template<typename TEnum, TEnum EValue> requires(std::is_enum_v<TEnum>)
-    class ConstexprName
+    class ConstexprName final : public Nano::Traits::NoConstruct
     {
     public:
         inline constexpr static const std::string_view ClassToken = "Nano::Internal::Enum::ConstexprName<";
@@ -928,7 +928,7 @@ namespace Nano::Internal::Enum
 
     public:
         template<TEnum> requires(std::is_enum_v<TEnum>)
-        constexpr static std::string_view FullNameImpl()
+        consteval static std::string_view FullNameImpl() noexcept(true)
         {
             constexpr std::string_view FunctionToken = ">::FullNameImpl<";
 
@@ -962,7 +962,7 @@ namespace Nano::Internal::Enum
             return fullName;
         }
 
-        constexpr static std::string_view ElementNameImpl()
+        consteval static std::string_view ElementNameImpl() noexcept(true)
         {
             constexpr std::string_view fullName = FullNameImpl<EValue>();
 
@@ -983,7 +983,7 @@ namespace Nano::Internal::Enum
         }
 
         template<TEnum>
-        constexpr static std::string_view FunctionSignatureImpl()
+        consteval static std::string_view FunctionSignatureImpl() noexcept(true)
         {
             return { __FUNCSIG__, sizeof(__FUNCSIG__) };
         }
@@ -997,9 +997,12 @@ namespace Nano::Internal::Enum
 
     #elif defined(NANO_COMPILER_GCC) || defined(NANO_COMPILER_CLANG)
     template<typename TEnum, TEnum EValue> requires(std::is_enum_v<TEnum>)
-    class ConstexprName
+    class ConstexprName final : public Nano::Traits::NoConstruct
     {
-        constexpr static std::string_view FullNameImpl()
+    public:
+        inline constexpr static const std::string_view Invalid = "1nvalid";
+    public:
+        consteval static std::string_view FullNameImpl() noexcept(true)
         {
             #if defined(NANO_COMPILER_CLANG)
             constexpr auto end = std::string_view(__PRETTY_FUNCTION__).find_last_of(']');
@@ -1032,7 +1035,7 @@ namespace Nano::Internal::Enum
             return std::string_view(__PRETTY_FUNCTION__).substr(start + 2, end - start - 2);
         }
 
-        constexpr static std::string_view ElementNameImpl()
+        consteval static std::string_view ElementNameImpl() noexcept(true)
         {
             constexpr std::string_view fullName = FullNameImpl();
 
@@ -1052,7 +1055,7 @@ namespace Nano::Internal::Enum
             return elementName;
         }
 
-        constexpr static std::string_view FunctionSignatureImpl()
+        consteval static std::string_view FunctionSignatureImpl() noexcept(true)
         {
             return { __PRETTY_FUNCTION__, sizeof(__PRETTY_FUNCTION__) };
         }
@@ -1072,7 +1075,7 @@ namespace Nano::Internal::Enum
     // Helper functions
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename TEnum, TEnum EValue> requires(std::is_enum_v<TEnum>)
-    constexpr std::string_view Name()
+    consteval std::string_view Name() noexcept(true)
     {
         if constexpr (ConstexprName<TEnum, EValue>::ElementName == ConstexprName<TEnum, EValue>::Invalid)
             return {};
@@ -1081,20 +1084,20 @@ namespace Nano::Internal::Enum
     }
 
     template<typename TEnum, TEnum EValue> requires(std::is_enum_v<TEnum>)
-    constexpr bool IsValid()
+    consteval bool IsValid() noexcept(true)
     {
         constexpr TEnum value = static_cast<TEnum>(EValue);
         return !Name<TEnum, value>().empty();
     }
 
     template<typename TEnum> requires(std::is_enum_v<TEnum>)
-    constexpr TEnum UAlue(size_t v)
+    consteval TEnum UAlue(size_t v) noexcept(true)
     {
         return static_cast<TEnum>(Nano::Enum::Range<TEnum>::Min + v);
     }
 
     template<size_t N>
-    constexpr size_t CountValues(const bool(&valid)[N])
+    consteval size_t CountValues(const bool(&valid)[N]) noexcept(true)
     {
         size_t count = 0;
         for (size_t n = 0; n < N; n++)
@@ -1110,7 +1113,7 @@ namespace Nano::Internal::Enum
     // Values
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename TEnum, size_t... I> requires(std::is_enum_v<TEnum>)
-    constexpr auto ValuesImpl(std::index_sequence<I...>)
+    consteval auto ValuesImpl(std::index_sequence<I...>) noexcept(true)
     {
         constexpr bool valid[sizeof...(I)] = { IsValid<TEnum, UAlue<TEnum>(I)>()... };
         constexpr auto validCount = CountValues(valid);
@@ -1130,7 +1133,7 @@ namespace Nano::Internal::Enum
     }
 
     template<typename TEnum> requires(std::is_enum_v<TEnum>)
-    constexpr auto ValuesImpl()
+    consteval auto ValuesImpl() noexcept(true)
     {
         constexpr auto enumSize = Nano::Enum::Range<TEnum>::Max - Nano::Enum::Range<TEnum>::Min + 1;
         return ValuesImpl<TEnum>(std::make_index_sequence<enumSize>({}));
@@ -1143,7 +1146,7 @@ namespace Nano::Internal::Enum
     // Entries
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename TEnum, size_t... I> requires(std::is_enum_v<TEnum>)
-    constexpr auto EntriesImpl(std::index_sequence<I...>)
+    consteval auto EntriesImpl(std::index_sequence<I...>) noexcept(true)
     {
         return std::array<std::pair<TEnum, std::string_view>, sizeof...(I)>{
             { { Values<TEnum>[I], Name<TEnum, Values<TEnum>[I]>() }... }
@@ -1157,14 +1160,14 @@ namespace Nano::Internal::Enum
     // Utilities
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename TEnum> requires(std::is_enum_v<TEnum>)
-    constexpr size_t Count()
+    consteval size_t Count() noexcept(true)
     {
         constexpr auto values = Entries<TEnum>;
         return values.size();
     }
 
     template<typename TEnum> requires(std::is_enum_v<TEnum>)
-    constexpr size_t Index(const TEnum value)
+    consteval size_t Index(TEnum value) noexcept(true)
     {
         constexpr auto values = Entries<TEnum>;
 
@@ -1184,7 +1187,7 @@ namespace Nano::Internal::Enum
     // Fusing
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename TEnum> requires(std::is_enum_v<TEnum>)
-    constexpr uintmax_t FuseOne(uintmax_t hash, TEnum value)
+    constexpr uintmax_t FuseOne(uintmax_t hash, TEnum value) noexcept(true)
     {
         constexpr auto typeHash = Hash::fnv1a(Nano::Types::Name<TEnum>());
         uintmax_t integerValue = static_cast<uintmax_t>(value);
@@ -1193,13 +1196,13 @@ namespace Nano::Internal::Enum
     }
 
     template<typename TEnum> requires(std::is_enum_v<TEnum>)
-    constexpr uintmax_t Fuse(TEnum value)
+    constexpr uintmax_t Fuse(TEnum value) noexcept(true)
     {
         return FuseOne(0, value);
     }
 
     template<typename TEnum, typename... TEnums> requires(std::is_enum_v<TEnum> && (std::is_enum_v<TEnums> && ...))
-    constexpr uintmax_t Fuse(TEnum head, TEnums... tail)
+    constexpr uintmax_t Fuse(TEnum head, TEnums... tail) noexcept(true)
     {
         return FuseOne(Fuse(tail...), head);
     }
@@ -1213,7 +1216,7 @@ namespace Nano::Enum
     // Name
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename TEnum> requires(std::is_enum_v<TEnum>)
-    constexpr std::string_view Name(const TEnum value) 
+    constexpr std::string_view Name(TEnum value) noexcept(true)
     {
         constexpr const auto entries = Nano::Internal::Enum::Entries<TEnum>;
 
@@ -1228,7 +1231,7 @@ namespace Nano::Enum
 
     // TODO: ...
     template<typename TEnum> requires(std::is_enum_v<TEnum> /*&& std::is_class_v<TEnum>*/)
-    [[deprecated]] constexpr std::string_view FullName(const TEnum value)
+    [[deprecated]] constexpr std::string_view FullName(TEnum value) noexcept(true)
     {
         //return Nano::Types::Name<TEnum>() + "::" + Nano::Enum::Name(value);
         return "TODO";
@@ -1240,7 +1243,7 @@ namespace Nano::Enum
     enum class Fused : uintmax_t;
 
     template<typename... TEnums>
-    constexpr Fused Fuse(TEnums... values) requires((std::is_enum_v<TEnums> && ...))
+    constexpr Fused Fuse(TEnums... values) noexcept(true) requires((std::is_enum_v<TEnums> && ...))
     {
         static_assert(sizeof...(TEnums) >= 2, "Fuse requires at least 2 values.");
         return static_cast<Fused>(Internal::Enum::Fuse<std::decay_t<TEnums>...>(values...));
@@ -1260,21 +1263,20 @@ namespace Nano
     // ScopeExit
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename TFunc> requires(std::invocable<TFunc>)
-    class ScopeExit
+    class ScopeExit final : public Traits::NoCopy, public Traits::NoMove
     {
     public:
         // Constructor & Destructor
-        inline explicit ScopeExit(TFunc&& func)
-            : m_Func(std::move(func)) {
-        }
-        inline ~ScopeExit()
+        inline explicit ScopeExit(TFunc&& func) noexcept(true)
+            : m_Func(std::move(func)) {}
+        inline ~ScopeExit() noexcept(std::is_nothrow_invocable_v<TFunc>)
         {
             if (m_Active)
                 m_Func();
         }
 
         // Method
-        inline void Release() { m_Active = false; }
+        inline void Release() noexcept(true) { m_Active = false; }
 
     private:
         TFunc m_Func;
@@ -1294,12 +1296,12 @@ namespace Nano::Functional
     ////////////////////////////////////////////////////////////////////////////////////
     // FunctionConversion
     ////////////////////////////////////////////////////////////////////////////////////
-    class Conversion : public Traits::NoConstruct
+    class Conversion final : public Traits::NoConstruct
     {
     public:
         // Converts a member function into a static-like function
         template<typename ObjType, typename ReturnType, typename... Args>
-        constexpr static auto ToStatic(ReturnType(ObjType::* memFn)(Args...))
+        constexpr static auto ToStatic(ReturnType(ObjType::* memFn)(Args...)) noexcept(true)
         {
             return [memFn](ObjType* obj, Args... args) -> ReturnType { return (obj->*memFn)(args...); };
         }
@@ -1365,7 +1367,7 @@ namespace Nano::Time
     // Casting
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename FromPeriod, typename ToPeriod, typename Representation = uint64_t>
-    inline Representation Cast(Representation from) requires(Period::IsPeriod<FromPeriod> && Period::IsPeriod<ToPeriod>)
+    inline Representation Cast(Representation from) noexcept(true) requires(Period::IsPeriod<FromPeriod> && Period::IsPeriod<ToPeriod>)
     {
         std::chrono::duration_cast<std::chrono::duration<Representation, typename ToPeriod::Ratio>>(std::chrono::duration<Representation, typename FromPeriod::Ratio>(from)).count();
     }
@@ -1374,21 +1376,28 @@ namespace Nano::Time
     // Methods
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename TimePeriod = Period::Milliseconds, typename Representation = uint64_t>
-    inline Representation SinceEpoch() requires(Period::IsPeriod<TimePeriod>)
+    inline Representation SinceEpoch() noexcept(true) requires(Period::IsPeriod<TimePeriod>)
     {
         return std::chrono::duration_cast<std::chrono::duration<Representation, typename TimePeriod::Ratio>>(std::chrono::system_clock::now().time_since_epoch()).count();
     }
 
     template<typename TimePeriod = Period::Milliseconds, typename Representation = uint64_t>
-    inline Representation SteadyTime() requires(Period::IsPeriod<TimePeriod>) // Note: This will just increase normally even when user changes system time.
+    inline Representation SteadyTime() noexcept(true) requires(Period::IsPeriod<TimePeriod>) // Note: This will just increase normally even when user changes system time.
     {
         return std::chrono::duration_cast<std::chrono::duration<Representation, typename TimePeriod::Ratio>>(std::chrono::steady_clock::now().time_since_epoch()).count();
     }
 
     template<typename TimePeriod = Period::Milliseconds, typename Representation = uint64_t>
-    inline Representation HighResTime() requires(Period::IsPeriod<TimePeriod>) // Note: This is accurate to a microsecond (below that is often rounded up/down, due to internal timer interval)
+    inline Representation HighResTime() noexcept(true) requires(Period::IsPeriod<TimePeriod>) // Note: This is accurate to a microsecond (below that is often rounded up/down, due to internal timer interval)
     {
-        return std::chrono::duration_cast<std::chrono::duration<Representation, typename TimePeriod::Ratio>>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+        if constexpr (std::chrono::high_resolution_clock::is_steady)
+        {
+            return std::chrono::duration_cast<std::chrono::duration<Representation, typename TimePeriod::Ratio>>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+        }
+        else
+        {
+            return std::chrono::duration_cast<std::chrono::duration<Representation, typename TimePeriod::Ratio>>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        }
     }
 
     template<typename TimePeriod = Period::Milliseconds, typename Representation = double>
@@ -1398,7 +1407,7 @@ namespace Nano::Time
     }
 
     template<typename TimePeriod = Period::Milliseconds, typename Representation = double>
-    inline void BusyWait(Representation time) // Note: Uses a lot of CPU (but is really accurate)
+    inline void BusyWait(Representation time) noexcept(true) // Note: Uses a lot of CPU (but is really accurate)
     {
         auto start = std::chrono::steady_clock::now();
         while (std::chrono::steady_clock::now() - start < std::chrono::duration<Representation, typename TimePeriod::Ratio>(time));
@@ -1410,27 +1419,24 @@ namespace Nano::Time
     // Timer
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename TimePeriod = Period::Milliseconds, typename Representation = double> requires(Period::IsPeriod<TimePeriod>)
-    class Timer // Note: Uses high resolution clock
+    class Timer final // Note: Uses high resolution clock
     {
     public:
         // Constructor & Destructor
-        inline Timer(bool startOnConstruct = true)
+        inline Timer(bool startOnConstruct = true) noexcept(true)
         {
-            // Note: This static_assert is in the function to only call it when the functionality of this class is used.
-            static_assert(std::chrono::high_resolution_clock::is_steady, "High resolution clock not steady on this platform.");
-
             if (startOnConstruct)
                 Start();
         }
-        ~Timer() = default;
+        ~Timer() noexcept(true) = default;
 
         // Methods
-        inline void Start()
+        inline void Start() noexcept(true)
         {
             m_Start = HighResTime<TimePeriod, Representation>();
         }
 
-        Representation Restart()
+        Representation Restart() noexcept(true)
         {
             Representation end = HighResTime<TimePeriod, Representation>();
             Representation time = end - m_Start;
@@ -1438,16 +1444,16 @@ namespace Nano::Time
             return time;
         }
 
-        inline Representation TimeActive() const
+        inline Representation TimeActive() const noexcept(true)
         {
             return HighResTime<TimePeriod, Representation>() - m_Start;
         }
 
         // Operators
-        inline operator Representation() const { return TimeActive(); }
+        inline operator Representation() const noexcept(true) { return TimeActive(); }
 
         // Getters
-        inline Representation GetStart() const { return m_Start; }
+        inline Representation GetStart() const noexcept(true) { return m_Start; }
 
     private:
         Representation m_Start = static_cast<Representation>(0);
@@ -1492,7 +1498,7 @@ namespace Nano
     ////////////////////////////////////////////////////////////////////////////////////
     // Random
     ////////////////////////////////////////////////////////////////////////////////////
-    class Random : Traits::NoConstruct
+    class Random final : Traits::NoConstruct
     {
     public:
         // Seeding
@@ -1554,7 +1560,7 @@ namespace Nano
     ////////////////////////////////////////////////////////////////////////////////////
     // FastRandom
     ////////////////////////////////////////////////////////////////////////////////////
-    class FastRandom : public Traits::NoConstruct
+    class FastRandom final : public Traits::NoConstruct
     {
     public:
         // Seeding
@@ -1599,11 +1605,11 @@ namespace Nano
 
     private:
         // Private methods
-        inline static uint64_t Next() { return NextXORShift64(); } // Chosen FastRandom method
+        inline static uint64_t Next() noexcept(true) { return NextXORShift64(); } // Chosen FastRandom method
 
-        static uint64_t NextXORShift64();   // Very fast, low quality
-        static uint64_t NextSplitMix64();   // Great for seeding
-        static uint64_t NextPCG32();        // Great balance, highly recommended
+        static uint64_t NextXORShift64()    noexcept(true); // Very fast, low quality
+        static uint64_t NextSplitMix64()    noexcept(true); // Great for seeding
+        static uint64_t NextPCG32()         noexcept(true); // Great balance, highly recommended
 
     private:
         static thread_local uint64_t s_State;
@@ -1625,7 +1631,7 @@ namespace Nano
     ////////////////////////////////////////////////////////////////////////////////////
     // Private methods
     ////////////////////////////////////////////////////////////////////////////////////
-    uint64_t FastRandom::NextXORShift64()
+    uint64_t FastRandom::NextXORShift64() noexcept(true)
     {
         s_State ^= s_State << 13;
         s_State ^= s_State >> 7;
@@ -1633,7 +1639,7 @@ namespace Nano
         return s_State;
     }
 
-    uint64_t FastRandom::NextSplitMix64()
+    uint64_t FastRandom::NextSplitMix64() noexcept(true)
     {
         s_State += 0x9E3779B97F4A7C15ULL;
         uint64_t z = s_State;
@@ -1642,7 +1648,7 @@ namespace Nano
         return (z ^ (z >> 31));
     }
 
-    uint64_t FastRandom::NextPCG32()
+    uint64_t FastRandom::NextPCG32() noexcept(true)
     {
         uint64_t oldstate = s_State;
         s_State = oldstate * 6364136223846793005ULL + 1442695040888963407ULL;
@@ -1666,7 +1672,7 @@ namespace Nano::Maths
     // Utility
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename T>
-    constexpr uint8_t CountNumbers(T value) requires(std::is_arithmetic_v<T>)
+    constexpr uint8_t CountNumbers(T value) noexcept(true) requires(std::is_arithmetic_v<T>)
     {
         std::array<char, 64> buffer = { };
         auto [ptr, ec] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
@@ -1713,7 +1719,7 @@ namespace Nano
     // Expected<T, E>
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename T, typename E>
-    class Expected : public Traits::NoCopy, public Traits::NoMove
+    class Expected final : public Traits::NoCopy, public Traits::NoMove
     {
     public:
         using ValueType = T;
@@ -1723,16 +1729,16 @@ namespace Nano
         template<typename T2>               struct _GetExpectedErrorType;
         template<typename T2, typename E2>  struct _GetExpectedErrorType<Expected<T2, E2>> { using Type = E2; };
     public:
-        // Constructors & Destructor
-        inline Expected(const T& value) 
+        // Constructors & Destructor // TODO: Add Args&& constructors?
+        inline constexpr Expected(const T& value) noexcept(std::is_nothrow_copy_constructible_v<T>)
             : m_Value(value), m_HasValue(true) {}
-        inline Expected(T&& value) 
+        inline constexpr Expected(T&& value) noexcept(true)
             : m_Value(std::move(value)), m_HasValue(true) {}
-        inline Expected(const E& error) 
+        inline constexpr Expected(const E& error) noexcept(std::is_nothrow_copy_constructible_v<E>)
             : m_Error(error), m_HasValue(false) {}
-        inline Expected(E&& error) 
+        inline constexpr Expected(E&& error) noexcept(true)
             : m_Error(std::move(error)), m_HasValue(false) {}
-        inline ~Expected() 
+        inline constexpr ~Expected()
         {
             if (m_HasValue)
             {
@@ -1751,31 +1757,31 @@ namespace Nano
         }
         
         // Operators
-        inline operator T& () { CheckConstructed(); return m_Value; }
-        inline operator const T& () const { CheckConstructed(); return m_Value; }
-        inline operator T* () { CheckConstructed(); return m_Value; }
-        inline operator const T* () const { CheckConstructed(); return m_Value; }
+        inline constexpr operator T& ()                 noexcept(true)  { CheckConstructed(); return m_Value; }
+        inline constexpr operator const T& ()   const   noexcept(true)  { CheckConstructed(); return m_Value; }
+        inline constexpr operator T* ()                 noexcept(true)  { CheckConstructed(); return m_Value; }
+        inline constexpr operator const T* ()   const   noexcept(true)  { CheckConstructed(); return m_Value; }
 
-        inline T* operator -> () { CheckConstructed(); return m_Value; }
-        inline const T* operator -> () const { CheckConstructed(); return m_Value; }
+        inline constexpr T* operator -> ()              noexcept(true)  { CheckConstructed(); return m_Value; }
+        inline constexpr const T* operator -> () const                  { CheckConstructed(); return m_Value; }
 
-        inline explicit operator bool() const { return m_HasValue; }
+        inline constexpr explicit operator bool() const noexcept(true) { return m_HasValue; }
         
         // Value
-        inline T& Get() { CheckConstructed(); return m_Value; }
-        inline const T& Get() const { CheckConstructed(); return m_Value; }
+        inline constexpr T& Get()               noexcept(true) { CheckConstructed(); return m_Value; }
+        inline constexpr const T& Get() const   noexcept(true) { CheckConstructed(); return m_Value; }
 
         // Error
-        inline E& Error() { ErrorPresent(); return m_Value; }
-        inline const E& Error() const { ErrorPresent(); return m_Value; }
+        inline constexpr E& Error()             noexcept(true)  { ErrorPresent(); return m_Value; }
+        inline constexpr const E& Error() const noexcept(true)  { ErrorPresent(); return m_Value; }
 
         // Getters
-        inline bool HasValue() const { return m_HasValue; }
-        inline bool HasError() const { return !m_HasValue; }
+        inline constexpr bool HasValue() const noexcept(true) { return m_HasValue; }
+        inline constexpr bool HasError() const noexcept(true) { return !m_HasValue; }
 
         // Methods
         template<typename TFunc, typename ...TArgs>
-        auto AndThen(TFunc&& f, TArgs&& ...args) & requires (std::invocable<TFunc, const T&, TArgs...>)
+        constexpr auto AndThen(TFunc&& f, TArgs&& ...args) & noexcept(std::is_nothrow_invocable_v<TFunc, T&, TArgs...>) requires (std::invocable<TFunc, T&, TArgs...>)
         {
             using Result = std::invoke_result_t<TFunc, T&, TArgs...>;
             static_assert(std::is_same_v<typename _GetExpectedErrorType<Result>::Type, E>, "Mismatched error types");
@@ -1789,7 +1795,7 @@ namespace Nano
         }
 
         template<typename TFunc, typename ...TArgs>
-        auto AndThen(TFunc&& f, TArgs&& ...args) const& requires (std::invocable<TFunc, const T&, TArgs...>)
+        constexpr auto AndThen(TFunc&& f, TArgs&& ...args) const& noexcept(std::is_nothrow_invocable_v<TFunc, const T&, TArgs...>) requires (std::invocable<TFunc, const T&, TArgs...>)
         {
             using Result = std::invoke_result_t<TFunc, const T&, TArgs...>;
             static_assert(std::is_same_v<typename _GetExpectedErrorType<Result>::Type, E>, "Mismatched error types");
@@ -1803,7 +1809,7 @@ namespace Nano
         }
 
         template<typename TFunc, typename ...TArgs>
-        auto AndThen(TFunc&& f, TArgs&& ...args) && requires (std::invocable<TFunc, const T&, TArgs...>)
+        constexpr auto AndThen(TFunc&& f, TArgs&& ...args) && noexcept(std::is_nothrow_invocable_v<TFunc, const T&, TArgs...>) requires (std::invocable<TFunc, const T&, TArgs...>)
         {
             using Result = std::invoke_result_t<TFunc, const T&, TArgs...>;
             static_assert(std::is_same_v<typename _GetExpectedErrorType<Result>::Type, E>, "Mismatched error types");
@@ -1818,14 +1824,14 @@ namespace Nano
 
     private:
         // Debug method
-        inline void CheckConstructed() const
+        inline constexpr void CheckConstructed() const noexcept(true)
         {
             #if defined(NANO_DEBUG_EXPECTED)
             NANO_ASSERT(m_HasValue, "Object not constructed yet.");
             #endif
         }
 
-        inline void ErrorPresent() const
+        inline constexpr void ErrorPresent() const noexcept(true)
         {
             #if defined(NANO_DEBUG_EXPECTED)
             NANO_ASSERT(!m_HasValue, "No error present.");
@@ -1864,7 +1870,7 @@ namespace Nano::Internal::Threading
     ////////////////////////////////////////////////////////////////////////////////////
     // AsyncMode
     ////////////////////////////////////////////////////////////////////////////////////
-    inline constexpr std::launch AsyncModeToLauch(Nano::Threading::AsyncMode mode)
+    inline constexpr std::launch AsyncModeToLauch(Nano::Threading::AsyncMode mode) noexcept(true)
     {
         switch (mode)
         {
@@ -1882,8 +1888,8 @@ namespace Nano::Threading // TODO: Add concurrency in the future
     ////////////////////////////////////////////////////////////////////////////////////
     // Utilities
     ////////////////////////////////////////////////////////////////////////////////////
-    inline uint64_t ID() { return std::hash<std::thread::id>()(std::this_thread::get_id()); }
-    inline uint32_t HardwareThreads() { return std::thread::hardware_concurrency(); }
+    inline uint64_t ID()                noexcept(true) { return std::hash<std::thread::id>()(std::this_thread::get_id()); }
+    inline uint32_t HardwareThreads()   noexcept(true) { return std::thread::hardware_concurrency(); }
 
     ////////////////////////////////////////////////////////////////////////////////////
     // Async
@@ -1897,7 +1903,7 @@ namespace Nano::Threading // TODO: Add concurrency in the future
     ////////////////////////////////////////////////////////////////////////////////////
     // ThreadPool
     ////////////////////////////////////////////////////////////////////////////////////
-    class ThreadPool
+    class ThreadPool final : public Traits::NoCopy
     {
     public:
         // Constructor & Destructor
@@ -2007,7 +2013,7 @@ namespace Nano::Events
     // EventDispatcher
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename TEventVariant> requires requires { typename std::variant_size<TEventVariant>::type; }
-    class EventDispatcher
+    class EventDispatcher final
     {
     public:
         using SubscribeFn = std::function<void(TEventVariant& e)>;
@@ -2037,7 +2043,7 @@ namespace Nano::Events
     // EventHandler
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename TEventVariant> requires requires { typename std::variant_size<TEventVariant>::type; }
-    class EventHandler
+    class EventHandler final
     {
     public:
         // Constructor & Destructor
@@ -2071,7 +2077,7 @@ namespace Nano::Internal::ECS
     // Storage
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename ID, typename ...Components> requires(std::is_integral_v<ID>)
-    class Storage
+    class Storage final
     {
     public:
         using TypesTuple = std::tuple<Components...>;
@@ -2081,7 +2087,7 @@ namespace Nano::Internal::ECS
         Storage() = default;
         ~Storage() = default;
 
-        // Methods // TODO: Add requires InTuple
+        // Methods
         template<typename TComponent>
         void AddComponent(ID id, const TComponent& component) requires(Nano::Types::TupleContains<TComponent, TypesTuple> && std::is_copy_constructible_v<TComponent>)
         {
@@ -2139,7 +2145,7 @@ namespace Nano::Internal::ECS
     // ComponentView
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename ID, typename ...Components>
-    class ComponentView
+    class ComponentView final : public Nano::Traits::NoCopy
     {
     public:
         using SparseSetsTuple = std::tuple<std::add_lvalue_reference_t<SparseSet<Components, ID>>...>;
@@ -2293,29 +2299,29 @@ namespace Nano::ECS
 
         // Methods
         template<typename TComponent>
-        void AddComponent(ID id, const TComponent& component) requires(Nano::Types::TupleContains<TComponent, TypesTuple> && std::is_copy_constructible_v<TComponent>) { m_Storage.AddComponent<TComponent>(id, component); }
+        void AddComponent(ID id, const TComponent& component) requires(Nano::Types::TupleContains<TComponent, TypesTuple> && std::is_copy_constructible_v<TComponent>) { m_Storage.template AddComponent<TComponent>(id, component); }
         template<typename TComponent>
-        void AddComponent(ID id, TComponent&& component) requires(Nano::Types::TupleContains<TComponent, TypesTuple> && std::is_move_constructible_v<TComponent>) { m_Storage.AddComponent<TComponent>(id, std::move(component)); }
+        void AddComponent(ID id, TComponent&& component) requires(Nano::Types::TupleContains<TComponent, TypesTuple> && std::is_move_constructible_v<TComponent>) { m_Storage.template AddComponent<TComponent>(id, std::move(component)); }
         template<typename TComponent, typename ...TArgs>
-        void AddComponent(ID id, TArgs&& ...args) requires(Nano::Types::TupleContains<TComponent, TypesTuple> && std::is_constructible_v<TComponent, TArgs...>) { m_Storage.AddComponent<TComponent>(id, std::forward<TArgs>(args)...); }
+        void AddComponent(ID id, TArgs&& ...args) requires(Nano::Types::TupleContains<TComponent, TypesTuple> && std::is_constructible_v<TComponent, TArgs...>) { m_Storage.template AddComponent<TComponent>(id, std::forward<TArgs>(args)...); }
 
         template<typename TComponent>
-        void RemoveComponent(ID id) requires(Nano::Types::TupleContains<TComponent, TypesTuple>) { m_Storage.RemoveComponent<TComponent>(id); }
+        void RemoveComponent(ID id) requires(Nano::Types::TupleContains<TComponent, TypesTuple>) { m_Storage.template RemoveComponent<TComponent>(id); }
 
         // Getters
         template<typename TComponent>
-        bool HasComponent(ID id) const requires(Nano::Types::TupleContains<TComponent, TypesTuple>) { return m_Storage.HasComponent<TComponent>(id); }
+        bool HasComponent(ID id) const requires(Nano::Types::TupleContains<TComponent, TypesTuple>) { return m_Storage.template HasComponent<TComponent>(id); }
 
         template<typename TComponent>
-        TComponent& GetComponent(ID id) requires(Nano::Types::TupleContains<TComponent, TypesTuple>) { return m_Storage.GetComponent<TComponent>(id); }
+        TComponent& GetComponent(ID id) requires(Nano::Types::TupleContains<TComponent, TypesTuple>) { return m_Storage.template GetComponent<TComponent>(id); }
         template<typename TComponent>
-        const TComponent& GetComponent(ID id) const requires(Nano::Types::TupleContains<TComponent, TypesTuple>) { return m_Storage.GetComponent<TComponent>(id); }
+        const TComponent& GetComponent(ID id) const requires(Nano::Types::TupleContains<TComponent, TypesTuple>) { return m_Storage.template GetComponent<TComponent>(id); }
 
-        // Views // TODO: std::ranges::views::zip();
+        // Views
         template<typename TComponent>
         auto View() requires(Nano::Types::TupleContains<TComponent, TypesTuple>)
         {
-            auto& set = m_Storage.GetSparseSet<TComponent>();
+            auto& set = m_Storage.template GetSparseSet<TComponent>();
             NANO_ASSERT((set.GetIDs().size() == set.GetValues().size()), "Amount of entities doesn't equal amount of components.");
             return std::ranges::views::zip(set.GetIDs(), set.GetValues());
         }
@@ -2328,7 +2334,7 @@ namespace Nano::ECS
 
             Nano::Types::ForEachTypeInTuple<std::tuple<TComponents...>>([&]<typename TComponent>()
             {
-                auto& set = m_Storage.GetSparseSet<TComponent>();
+                auto& set = m_Storage.template GetSparseSet<TComponent>();
                 if (set.Size() < smallestSize)
                 {
                     smallestSize = set.Size();
@@ -2337,7 +2343,7 @@ namespace Nano::ECS
             });
 
             std::span<const ID> ids = std::visit([](auto&& obj) -> std::span<const ID> { return obj->GetIDs(); }, smallest);
-            auto sets = std::forward_as_tuple(m_Storage.GetSparseSet<TComponents>()...);
+            auto sets = std::forward_as_tuple(m_Storage.template GetSparseSet<TComponents>()...);
             return Internal::ECS::ComponentView<ID, TComponents...>{ ids, std::move(sets) };
         }
 
@@ -2353,7 +2359,7 @@ namespace Nano::ECS
     // Specialization for Components Tuple
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename ID, typename... Components>
-    class Registry<ID, std::tuple<Components...>> : public Registry<ID, Components...>
+    class Registry<ID, std::tuple<Components...>> final : public Registry<ID, Components...>
     {
     public:
         using Registry<ID, Components...>::Registry;
@@ -2372,7 +2378,7 @@ namespace Nano::Internal
     ////////////////////////////////////////////////////////////////////////////////////
     // Test
     ////////////////////////////////////////////////////////////////////////////////////
-    struct Test
+    struct Test final
     {
     public:
         using Function = void (*)();
@@ -2390,7 +2396,7 @@ namespace Nano::Internal
     ////////////////////////////////////////////////////////////////////////////////////
     // ExpressionDetails
     ////////////////////////////////////////////////////////////////////////////////////
-    struct ExpressionDetails
+    struct ExpressionDetails final
     {
     public:
         const char* File = nullptr;
@@ -2406,7 +2412,7 @@ namespace Nano::Internal
     ////////////////////////////////////////////////////////////////////////////////////
     // TestRegistry
     ////////////////////////////////////////////////////////////////////////////////////
-    class TestRegistry : public Nano::Traits::NoCopy, public Nano::Traits::NoMove
+    class TestRegistry final : public Nano::Traits::NoCopy, public Nano::Traits::NoMove
     {
     public:
         // Constructor & Destructor
@@ -2457,18 +2463,18 @@ namespace Nano::Internal
 }
 
 // Test case
-#define NANO_TEST_CASE_HELPER2(identifier, name)                                                                             \
+#define NANO_TEST_CASE_HELPER2(identifier, name)                                                                                \
     void _TestFn##identifier();                                                                                                 \
-    inline void _TestAdd##identifier() { ::Nano::Internal::TestRegistry::Get().AddTest(name, &_TestFn##identifier); }        \
-    NANO_RUN_FUNCTION(_TestAdd##identifier)                                                                                  \
+    inline void _TestAdd##identifier() { ::Nano::Internal::TestRegistry::Get().AddTest(name, &_TestFn##identifier); }           \
+    NANO_RUN_FUNCTION(_TestAdd##identifier)                                                                                     \
     void _TestFn##identifier()
 
 #define NANO_TEST_CASE_HELPER(identifier, name)                      NANO_TEST_CASE_HELPER2(identifier, name)
 #define NANO_TEST_CASE(name)                                         NANO_TEST_CASE_HELPER(__COUNTER__, name)
 
 // Test bool/require
-#define NANO_TEST_BOOL_HELPER2(identifier, expr, line, file)                                                                 \
-    bool _BoolResult##identifier =    ::Nano::Internal::TestRegistry::Get().Bool(file, line, #expr, expr);                   \
+#define NANO_TEST_BOOL_HELPER2(identifier, expr, line, file)                                                                    \
+    bool _BoolResult##identifier =    ::Nano::Internal::TestRegistry::Get().Bool(file, line, #expr, expr);                      \  
     if (!_BoolResult##identifier)     return                                                                                  
 
 #define NANO_TEST_BOOL_HELPER(identifier, expr, line, file)          NANO_TEST_BOOL_HELPER2(identifier, expr, line, file)
@@ -2477,7 +2483,7 @@ namespace Nano::Internal
 #define NANO_TEST_EXPECT(expr)                                       NANO_TEST_BOOL(expr)
 
 // Test equals
-#define NANO_TEST_EQUALS_HELPER2(identifier, one, two, line, file)                                                           \
+#define NANO_TEST_EQUALS_HELPER2(identifier, one, two, line, file)                                                              \
     auto _EqualsLeft##identifier =      one;                                                                                    \
     auto _EqualsRight##identifier =     two;                                                                                    \
     bool _EqualsResult##identifier =    ::Nano::Internal::TestRegistry::Get().Equals(file, line, #one, #two, (_EqualsLeft##identifier == _EqualsRight##identifier), _EqualsLeft##identifier, _EqualsRight##identifier);  \
@@ -2487,10 +2493,10 @@ namespace Nano::Internal
 #define NANO_TEST_EQUALS(left, right)                                NANO_TEST_EQUALS_HELPER(__COUNTER__, left, right, __LINE__, __FILE__)
 
 // Test main
-#define NANO_TEST_MAIN()                                     \
+#define NANO_TEST_MAIN()                                        \
     int main(int, char**)                                       \
     {                                                           \
-        ::Nano::Internal::TestRegistry::Get().Run();         \
+        ::Nano::Internal::TestRegistry::Get().Run();            \
         return 0;                                               \
     }
 
@@ -2593,7 +2599,7 @@ namespace Nano::Internal
     ////////////////////////////////////////////////////////////////////////////////////
     // BenchmarkResults
     ////////////////////////////////////////////////////////////////////////////////////
-    struct BenchmarkResults
+    struct BenchmarkResults final
     {
     public:
         std::string_view Name = {};
@@ -2607,7 +2613,7 @@ namespace Nano::Internal
     ////////////////////////////////////////////////////////////////////////////////////
     // Benchmark
     ////////////////////////////////////////////////////////////////////////////////////
-    struct Benchmark
+    struct Benchmark final
     {
     public:
         using Function = void (*)();
@@ -2616,7 +2622,7 @@ namespace Nano::Internal
         Function BenchmarkFunction = nullptr;
 
     public:
-        Benchmark() = default;
+        constexpr Benchmark() = default;
         inline Benchmark(std::string_view name, Function function)
             : Name(name), BenchmarkFunction(function) {}
         ~Benchmark() = default;
@@ -2625,7 +2631,7 @@ namespace Nano::Internal
     ////////////////////////////////////////////////////////////////////////////////////
     // BenchmarkPart
     ////////////////////////////////////////////////////////////////////////////////////
-    struct BenchmarkPart
+    struct BenchmarkPart final
     {
     public:
         enum class Type : uint8_t { None = 0, Timeout, Iterations };
@@ -2645,7 +2651,7 @@ namespace Nano::Internal
         ~BenchmarkPart();
 
         // Operators
-        inline operator bool() const { return true; }
+        inline consteval operator bool() const { return true; }
         inline BenchmarkPart& operator = (Function function)
         {
             PartFunction = function;
@@ -2656,7 +2662,7 @@ namespace Nano::Internal
     ////////////////////////////////////////////////////////////////////////////////////
     // BenchmarkRegistry
     ////////////////////////////////////////////////////////////////////////////////////
-    class BenchmarkRegistry
+    class BenchmarkRegistry final
     {
     public:
         // Constructor & Destructor
@@ -2682,26 +2688,26 @@ namespace Nano::Internal
 }
 
 // Bench init
-#define NANO_BENCHMARK_INIT_HELPER2(identifier, name)                                                                                \
-    void _BenchFn##identifier();                                                                                                        \
-    inline void _BenchAdd##identifier() { ::Nano::Internal::BenchmarkRegistry::Get().AddBenchmark(name, &_BenchFn##identifier); }    \
-    NANO_RUN_FUNCTION(_BenchAdd##identifier)                                                                                         \
+#define NANO_BENCHMARK_INIT_HELPER2(identifier, name)                                                                               \
+    void _BenchFn##identifier();                                                                                                    \
+    inline void _BenchAdd##identifier() { ::Nano::Internal::BenchmarkRegistry::Get().AddBenchmark(name, &_BenchFn##identifier); }   \
+    NANO_RUN_FUNCTION(_BenchAdd##identifier)                                                                                        \
     void _BenchFn##identifier()
 
 #define NANO_BENCHMARK_INIT_HELPER(identifier, name)        NANO_BENCHMARK_INIT_HELPER2(identifier, name)
 #define NANO_BENCHMARK_INIT(name)                           NANO_BENCHMARK_INIT_HELPER(__COUNTER__, name)
 
 // Bench iterations
-#define NANO_BENCHMARK_ITERATIONS_HELPER2(identifier, name, iterations)                                                              \
-    if (::Nano::Internal::BenchmarkPart part{::Nano::Internal::BenchmarkPart::Type::Iterations, name, iterations})                \
+#define NANO_BENCHMARK_ITERATIONS_HELPER2(identifier, name, iterations)                                                             \
+    if (::Nano::Internal::BenchmarkPart part{::Nano::Internal::BenchmarkPart::Type::Iterations, name, iterations})                  \
         part = [&]() 
 
 #define NANO_BENCHMARK_ITERATIONS_HELPER(identifier, name, iterations)   NANO_BENCHMARK_ITERATIONS_HELPER2(identifier, name, iterations)
 #define NANO_BENCHMARK_ITERATIONS(name, iterations)                      NANO_BENCHMARK_ITERATIONS_HELPER(__COUNTER__, name, iterations)
 
 // Bench timeout
-#define NANO_BENCHMARK_TIMEOUT_HELPER2(identifier, name, milliseconds)                                                               \
-    if (::Nano::Internal::BenchmarkPart part{::Nano::Internal::BenchmarkPart::Type::Timeout, name, milliseconds})                 \
+#define NANO_BENCHMARK_TIMEOUT_HELPER2(identifier, name, milliseconds)                                                              \
+    if (::Nano::Internal::BenchmarkPart part{::Nano::Internal::BenchmarkPart::Type::Timeout, name, milliseconds})                   \
         part = [&]() 
 
 #define NANO_BENCHMARK_TIMEOUT_HELPER(identifier, name, milliseconds)    NANO_BENCHMARK_TIMEOUT_HELPER2(identifier, name, milliseconds)
@@ -2710,18 +2716,18 @@ namespace Nano::Internal
 #define NANO_BENCHMARK_AUTO(name)                                        NANO_BENCHMARK_TIMEOUT(name, 2000)
 
 // Bench main
-#define NANO_BENCHMARK_MAIN()                                \
+#define NANO_BENCHMARK_MAIN()                                   \
     int main(int, char**)                                       \
     {                                                           \
-        ::Nano::Internal::BenchmarkRegistry::Get().Run();    \
+        ::Nano::Internal::BenchmarkRegistry::Get().Run();       \
         return 0;                                               \
     }
 
-#define NANO_TEST_BENCHMARK_MAIN()                           \
+#define NANO_TEST_BENCHMARK_MAIN()                              \
     int main(int, char**)                                       \
     {                                                           \
-        ::Nano::Internal::TestRegistry::Get().Run();         \
-        ::Nano::Internal::BenchmarkRegistry::Get().Run();    \
+        ::Nano::Internal::TestRegistry::Get().Run();            \
+        ::Nano::Internal::BenchmarkRegistry::Get().Run();       \
         return 0;                                               \
     }
 
@@ -2739,9 +2745,6 @@ namespace Nano::Internal
     ////////////////////////////////////////////////////////////////////////////////////
     BenchmarkPart::~BenchmarkPart()
     {
-        // Note: This static_assert is in the function to only call it when the functionality of this class is used.
-        static_assert(std::chrono::high_resolution_clock::is_steady, "High resolution clock not steady on this platform.");
-
         std::vector<uint64_t> times;
         
         // Timing
@@ -2749,15 +2752,15 @@ namespace Nano::Internal
         {
         case Type::Timeout:
         {
-            auto start = std::chrono::high_resolution_clock::now();
-            auto timeoutStart = std::chrono::high_resolution_clock::now();
-            while (std::chrono::duration_cast<std::chrono::duration<uint64_t, std::chrono::milliseconds::period>>(std::chrono::high_resolution_clock::now() - timeoutStart).count() < Count)
+            auto start = Nano::Time::HighResTime<Nano::Time::Period::Nanoseconds>();
+            auto timeoutStart = Nano::Time::HighResTime<Nano::Time::Period::Milliseconds>();
+            while (Nano::Time::HighResTime<Nano::Time::Period::Milliseconds>() - timeoutStart < Count)
             {
-                start = std::chrono::high_resolution_clock::now();
+                start = Nano::Time::HighResTime<Nano::Time::Period::Nanoseconds>();
 
                 PartFunction();
 
-                times.push_back(std::chrono::duration_cast<std::chrono::duration<uint64_t, std::chrono::nanoseconds::period>>(std::chrono::high_resolution_clock::now() - start).count());
+                times.push_back(Nano::Time::HighResTime<Nano::Time::Period::Nanoseconds>() - start);
             }
             break;
         }
@@ -2765,14 +2768,14 @@ namespace Nano::Internal
         {
             times.resize(Count);
 
-            auto start = std::chrono::high_resolution_clock::now();
+            auto start = Nano::Time::HighResTime<Nano::Time::Period::Nanoseconds>();
             for (size_t i = 0; i < Count; i++)
             {
-                start = std::chrono::high_resolution_clock::now();
+                start = Nano::Time::HighResTime<Nano::Time::Period::Nanoseconds>();
 
                 PartFunction();
 
-                times[i] = std::chrono::duration_cast<std::chrono::duration<uint64_t, std::chrono::nanoseconds::period>>(std::chrono::high_resolution_clock::now() - start).count();
+                times[i] = Nano::Time::HighResTime<Nano::Time::Period::Nanoseconds>() - start;
             }
             break;
         }
@@ -2842,10 +2845,28 @@ namespace Nano::Internal
                     return numStr;
                 };
 
+                // Add ' between every 3 numbers
+                auto addDot = [](std::string iterations) -> std::string
+                {
+                    std::string newTime;
+                    newTime.reserve(iterations.size() + (iterations.size() / 3));
+
+                    int count = 0;
+                    for (auto it = iterations.rbegin(); it != iterations.rend(); it++) 
+                    {
+                        newTime.push_back(*it);
+                        if (++count % 3 == 0 && std::next(it) != iterations.rend())
+                            newTime.push_back('\'');
+                    }
+
+                    std::reverse(newTime.begin(), newTime.end());
+                    return newTime;
+                };
+
                 // Values
                 std::string meanStr = toStr(result.Mean);
                 std::string medianStr = toStr(result.Median);
-                std::string iterationsStr = Nano::Maths::ToString(result.Iterations);
+                std::string iterationsStr = addDot(Nano::Maths::ToString(result.Iterations));
 
                 // Output
                 std::string first = Nano::Text::Format("    ({0}:{1}) - ", m_Benchmarks[m_ActiveBenchmark].Name, result.Name);
