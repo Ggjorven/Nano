@@ -716,6 +716,99 @@ namespace Nano
     };
 
     ////////////////////////////////////////////////////////////////////////////////////
+    // FixedStack
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<size_t Size = 1024, bool TrackDestructors = true>
+    class FixedStack // Note: The stack is current on the stack, maybe should be on the heap.
+    {
+    public:
+        struct Tracked
+        {
+        public:
+            using DestructorFn = void (*)(void* object);
+        public:
+            void* Object;
+            DestructorFn Destructor;
+        };
+
+        template<bool Track> struct TrackedObjects  { std::vector<Tracked> Objects = { }; };
+        template<> struct TrackedObjects<false>     { };
+
+    public:
+        // Constructor & Destructor
+        FixedStack() = default;
+        ~FixedStack()
+        {
+            if constexpr (TrackDestructors)
+            {
+                for (auto des = m_Tracked.Objects.rbegin(); des != m_Tracked.Objects.rend(); des++)
+                    des->Destructor(des->Object);
+            }
+        }
+
+        // Methods
+        template<typename T, typename ...TArgs>
+        [[nodiscard]] T* Allocate(TArgs&& ...args)
+        {
+            void* memory = Allocate(sizeof(T), alignof(T));
+            T* obj = new (memory) T(std::forward<TArgs>(args)...);
+
+            if constexpr (TrackDestructors && !std::is_trivially_destructible_v<T>)
+                m_Tracked.Objects.emplace_back(obj, [](void* p) { static_cast<T*>(p)->~T(); });
+
+            return obj;
+        }
+
+        template<typename T>
+        void Destroy(T* object) requires(TrackDestructors)
+        {
+            size_t fullSize = sizeof(T) + GetPadding(reinterpret_cast<size_t>(object), alignof(T));
+            NANO_ASSERT((static_cast<void*>(m_Stack.data() - fullSize) == (m_Used - fullSize)), "Trying to destroy an object not on the back of the stack.");
+            
+            auto& back = m_Tracked.Objects.back();
+            NANO_ASSERT((static_cast<void*>(m_Stack.data() - fullSize) == back.Object), "Trying to destroy an object not on the back of the stack.");
+
+            back.Destuctor(back.Object);
+            m_Tracked.Objects.pop_back();
+            m_Used -= fullSize;
+        }
+
+        // Extra
+        void ReserveTracked(size_t objectCount) requires(TrackDestructors)
+        {
+            m_Tracked.Objects.reserve(objectCount);
+        }
+
+    private:
+        // Private methods
+        [[nodiscard]] void* Allocate(size_t size, size_t alignment = alignof(std::max_align_t))
+        {
+            NANO_ASSERT(!(reinterpret_cast<size_t>(m_Used) + size + alignment > Size), "Size + alignment exceeds the Stack's max size.");
+
+            size_t padding = GetPadding(reinterpret_cast<size_t>(m_Stack.data() + m_Used), alignment)
+
+            NANO_ASSERT(!(reinterpret_cast<size_t>(m_Used) + padding + size > Size), "Size + padding exceeds the Stack's max size.");
+            
+            void* ptr = m_Stack.data() + m_Used + padding;
+            m_Used += padding + size;
+            return ptr;
+        }
+
+        [[nodiscard]] size_t GetPadding(size_t current, size_t alignment)
+        {
+            size_t aligned = (current + alignment - 1) & ~(alignment - 1);
+            return aligned - current;
+        }
+
+    private:
+        std::array<std::byte, Size> m_Stack;
+        size_t m_Used = 0;
+
+        [[no_unique_address]]
+        TrackedObjects<TrackDestructors> m_Tracked = {};
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////
     // ArenaAllocator
     ////////////////////////////////////////////////////////////////////////////////////
     template<size_t Size = 1 << 20, bool TrackDestructors = true>
@@ -753,7 +846,7 @@ namespace Nano
 
         // Methods
         template<typename T, typename ...TArgs>
-        T& Allocate(TArgs&& ...args)
+        [[nodiscard]] T* Allocate(TArgs&& ...args)
         {
             void* memory = Allocate(sizeof(T), alignof(T));
             T* obj = new (memory) T(std::forward<TArgs>(args)...);
@@ -761,7 +854,7 @@ namespace Nano
             if constexpr (TrackDestructors && !std::is_trivially_destructible_v<T>)
                 m_Tracked.Objects.emplace_back(obj, [](void* p) { static_cast<T*>(p)->~T(); });
             
-            return *obj;
+            return obj;
         }
 
         // Extra
@@ -783,16 +876,14 @@ namespace Nano
             m_Blocks.emplace_back(new std::byte[capacity], 0ull);
         }
 
-        void* Allocate(size_t size, size_t alignment = alignof(std::max_align_t)) 
+        [[nodiscard]] void* Allocate(size_t size, size_t alignment = alignof(std::max_align_t)) 
         {
             if (m_Blocks.empty() || m_Blocks.back().Used + size + alignment > (m_Blocks.size() * Size))
                 AllocateBlock();
 
             auto& b = m_Blocks.back();
 
-            size_t current = reinterpret_cast<size_t>(b.Data + b.Used);
-            size_t aligned = (current + alignment - 1) & ~(alignment - 1);
-            size_t padding = aligned - current;
+            size_t padding = GetPadding(reinterpret_cast<size_t>(b.Data + b.Used), alignment);
 
             if (b.Used + padding + size > (m_Blocks.size() * Size))
             {
@@ -803,6 +894,12 @@ namespace Nano
             void* ptr = b.Data + b.Used + padding;
             b.Used += padding + size;
             return ptr;
+        }
+
+        [[nodiscard]] size_t GetPadding(size_t current, size_t alignment)
+        {
+            size_t aligned = (current + alignment - 1) & ~(alignment - 1);
+            return aligned - current;
         }
 
         void ResetBlocks()

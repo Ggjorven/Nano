@@ -34,6 +34,23 @@ public:
     }
 };
 
+// NonTrivial
+struct NonTrivial
+{
+public:
+    NonTrivial(int val)
+        : Value(val) {
+    }
+    ~NonTrivial()
+    {
+        int a = 10;
+        a++;
+    }
+
+public:
+    int Value;
+};
+
 ////////////////////////////////////////////////////////////////////////////////////
 // Tests
 ////////////////////////////////////////////////////////////////////////////////////
@@ -133,6 +150,8 @@ NANO_TEST_CASE("Enum")
     // TODO: ...
     //std::string_view full = Nano::Enum::FullName(runtimeEmbedded);
     //Nano::Log::PrintLn("{0}", full);
+
+    // TODO: Fusing
 }
 
 // DeferredConstruct
@@ -142,6 +161,20 @@ NANO_TEST_CASE("DeferredConstruct")
     defer.Construct(10);
 
     NANO_TEST_EQUALS(defer->X, 10);
+}
+
+// FixedStack
+NANO_TEST_CASE("FixedStack") // TODO: ...
+{
+    using str = std::string;
+    NANO_TEST_EQUALS(str("TODO"), str("DONE"));
+}
+
+// Arena
+NANO_TEST_CASE("Arena") // TODO: ...
+{
+    using str = std::string;
+    NANO_TEST_EQUALS(str("TODO"), str("DONE"));
 }
 
 // ScopeExit
@@ -305,26 +338,40 @@ NANO_BENCHMARK_INIT("Enum")
         for (size_t i = 0; i < 10'000; i++)
             (void)Nano::Enum::Name(e255);
     };
+
+    // TODO: Fusing
+}
+
+// FixedStack
+NANO_BENCHMARK_INIT("FixedStack")
+{
+    NANO_BENCHMARK_AUTO("Init-1KiB")
+    {
+        Nano::FixedStack<1024, true> fixedStack = {};
+    };
+
+    Nano::FixedStack<1024, true> fixedStack1KiB_T = {};
+    NANO_BENCHMARK_AUTO("1KiB-T")
+    {
+        for (size_t i = 0; i < (((1024) / sizeof(NonTrivial))) - 1; i++)
+        {
+            (void)fixedStack1KiB_T.Allocate<NonTrivial>(69);
+        }
+    };
+
+    Nano::FixedStack<1024, false> fixedStack1KiB_UT = {};
+    NANO_BENCHMARK_AUTO("1KiB-UT")
+    {
+        for (size_t i = 0; i < (((1024) / sizeof(int))) - 1; i++)
+        {
+            (void)fixedStack1KiB_UT.Allocate<int>(69);
+        }
+    };
 }
 
 // ArenaAllocator
 NANO_BENCHMARK_INIT("Arena")
 {
-    struct NonTrivial
-    {
-    public:
-        NonTrivial(int val)
-            : Value(val) {}
-        ~NonTrivial()
-        {
-            int a = 10;
-            a++;
-        }
-
-    public:
-        int Value;
-    };
-
     NANO_BENCHMARK_AUTO("Init-1MiB")
     {
         Nano::ArenaAllocator<1 << 20, true> arenaAllocator = {};
@@ -333,18 +380,18 @@ NANO_BENCHMARK_INIT("Arena")
     Nano::ArenaAllocator<1 << 20, true> arenaAllocator1MiB_T = {};
     NANO_BENCHMARK_AUTO("1MiB-T")
     {
-        for (size_t i = 0; i < (((1ull << 20ull) / sizeof(NonTrivial))); i++)
+        for (size_t i = 0; i < (((1ull << 20ull) / sizeof(NonTrivial))) - 1; i++)
         {
-            arenaAllocator1MiB_T.Allocate<NonTrivial>(69);
+            (void)arenaAllocator1MiB_T.Allocate<NonTrivial>(69);
         }
     };
 
     Nano::ArenaAllocator<1 << 20, false> arenaAllocator1MiB_UT = {};
     NANO_BENCHMARK_AUTO("1MiB-UT")
     {
-        for (size_t i = 0; i < (((1ull << 20ull) / sizeof(int))); i++)
+        for (size_t i = 0; i < (((1ull << 20ull) / sizeof(int))) - 1; i++)
         {
-            arenaAllocator1MiB_UT.Allocate<int>(69);
+            (void)arenaAllocator1MiB_UT.Allocate<int>(69);
         }
     };
 }
