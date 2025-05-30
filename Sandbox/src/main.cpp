@@ -1,4 +1,5 @@
 #define NANO_IMPLEMENTATION
+#define NANO_EXPERIMENTAL
 #include "Nano.hpp"
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -51,6 +52,8 @@ NANO_TEST_CASE("Hashing")
 
     NANO_TEST_EQUALS(hash, 9289698454369670365ull);
     NANO_TEST_EQUALS(hash, Nano::Hash::fnv1a("coolstring"));
+
+    // TODO: More hashes
 }
 
 // Type
@@ -86,6 +89,16 @@ NANO_TEST_CASE("Types")
             i++;
         });
         NANO_TEST_EQUALS(i, 4);
+    }
+    {
+        constexpr std::tuple<int, unsigned int, float, double> first = { 1, 2ul, 3.0f, 4.0 };
+        constexpr auto second = Nano::Types::TupleRemoveTypes<unsigned int, float>(first);
+
+        NANO_TEST_EQUALS(Nano::Types::TupleTypeCount<decltype(second)>, 2);
+        NANO_TEST_BOOL((Nano::Types::TupleContains<int, decltype(second)>));
+        NANO_TEST_BOOL((Nano::Types::TupleContains<double, decltype(second)>));
+        NANO_TEST_BOOL(!(Nano::Types::TupleContains<unsigned int, decltype(second)>));
+        NANO_TEST_BOOL(!(Nano::Types::TupleContains<float, decltype(second)>));
     }
 }
 
@@ -145,7 +158,7 @@ NANO_TEST_CASE("ScopeExit")
 }
 
 // Expected
-NANO_TEST_CASE("Expected")
+NANO_TEST_CASE("Expected") // TODO: ...
 {
     using str = std::string;
     NANO_TEST_EQUALS(str("TODO"), str("DONE"));
@@ -209,8 +222,56 @@ NANO_TEST_CASE("ECS")
         NANO_TEST_BOOL(registry.HasComponent<unsigned int>(id1));
         NANO_TEST_BOOL(!registry.HasComponent<float>(id0));
 
-        auto& i = registry.GetComponent<int>(id0);
-        NANO_TEST_EQUALS(i, 69);
+        auto& val = registry.GetComponent<int>(id0);
+        NANO_TEST_EQUALS(val, 69);
+
+        {
+            {
+                auto view = registry.View<int>();
+                size_t index = 0;
+                std::array<int, 3> values = { 69, 9, 732890 };
+                for (auto [entity, i] : view)
+                {
+                    NANO_TEST_EQUALS(i, values[index++]);
+                }
+
+                index = 0;
+                view.ForEach([&](const uint64_t&, int& iVal)
+                {
+                    NANO_TEST_EQUALS(iVal, values[index++]);
+                });
+
+                index = 0;
+                view.ForEach([&](int& iVal)
+                {
+                    NANO_TEST_EQUALS(iVal, values[index++]);
+                });
+            }
+            {
+                auto view = registry.View<int, unsigned int>();
+                size_t index = 0;
+                std::array<std::pair<int, unsigned int>, 1> values = { std::make_pair<int, unsigned int>(9, 10u) };
+                for (auto [entity, i, ui] : view)
+                {
+                    NANO_TEST_EQUALS(i, values[index].first);
+                    NANO_TEST_EQUALS(ui, values[index++].second);
+                }
+
+                index = 0;
+                view.ForEach([&](const uint64_t&, int& iVal, unsigned int& uiVal)
+                {
+                    NANO_TEST_EQUALS(iVal, values[index].first);
+                    NANO_TEST_EQUALS(uiVal, values[index++].second);
+                });
+
+                index = 0;
+                view.ForEach([&](int& iVal, unsigned int& uiVal)
+                {
+                    NANO_TEST_EQUALS(iVal, values[index].first);
+                    NANO_TEST_EQUALS(uiVal, values[index++].second);
+                });
+            }
+        }
 
         registry.RemoveComponent<int>(id0);
         NANO_TEST_BOOL(!registry.HasComponent<int>(id0));
@@ -227,19 +288,64 @@ NANO_BENCHMARK_INIT("Enum")
     volatile E2 e128 = E2::N128;
     volatile E2 e255 = E2::N255;
 
-    NANO_BENCHMARK_AUTO("1")
+    NANO_BENCHMARK_AUTO("1-10'000")
     {
-        std::string_view n = Nano::Enum::Name(e1);
+        for (size_t i = 0; i < 10'000; i++)
+            (void)Nano::Enum::Name(e1);
     };
 
-    NANO_BENCHMARK_AUTO("128")
+    NANO_BENCHMARK_AUTO("128-10'000")
     {
-        std::string_view n = Nano::Enum::Name(e128);
+        for (size_t i = 0; i < 10'000; i++)
+            (void)Nano::Enum::Name(e128);
     };
 
-    NANO_BENCHMARK_AUTO("255")
+    NANO_BENCHMARK_AUTO("255-10'000")
     {
-        std::string_view n = Nano::Enum::Name(e255);
+        for (size_t i = 0; i < 10'000; i++)
+            (void)Nano::Enum::Name(e255);
+    };
+}
+
+// ArenaAllocator
+NANO_BENCHMARK_INIT("Arena")
+{
+    struct NonTrivial
+    {
+    public:
+        NonTrivial(int val)
+            : Value(val) {}
+        ~NonTrivial()
+        {
+            int a = 10;
+            a++;
+        }
+
+    public:
+        int Value;
+    };
+
+    NANO_BENCHMARK_AUTO("Init-1MiB")
+    {
+        Nano::ArenaAllocator<1 << 20, true> arenaAllocator = {};
+    };
+
+    Nano::ArenaAllocator<1 << 20, true> arenaAllocator1MiB_T = {};
+    NANO_BENCHMARK_AUTO("1MiB-T")
+    {
+        for (size_t i = 0; i < (((1ull << 20ull) / sizeof(NonTrivial))); i++)
+        {
+            arenaAllocator1MiB_T.Allocate<NonTrivial>(69);
+        }
+    };
+
+    Nano::ArenaAllocator<1 << 20, false> arenaAllocator1MiB_UT = {};
+    NANO_BENCHMARK_AUTO("1MiB-UT")
+    {
+        for (size_t i = 0; i < (((1ull << 20ull) / sizeof(int))); i++)
+        {
+            arenaAllocator1MiB_UT.Allocate<int>(69);
+        }
     };
 }
 

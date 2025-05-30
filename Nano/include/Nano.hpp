@@ -486,7 +486,11 @@ namespace Nano
     ////////////////////////////////////////////////////////////////////////////////////
     // DeferredConstruct<T>
     ////////////////////////////////////////////////////////////////////////////////////
-    template<typename T, bool Destroyable = false>
+    template<typename T
+        #if defined(NANO_EXPERIMENTAL)
+        , bool Destroyable = false
+        #endif
+    >
     class DeferredConstruct final : public Traits::NoCopy, public Traits::NoMove
     {
     public:
@@ -498,6 +502,7 @@ namespace Nano
         {
             if constexpr (!std::is_trivially_destructible_v<T>)
             {
+                #if defined(NANO_EXPERIMENTAL)
                 if constexpr (Destroyable)
                 {
                     if (!std::ranges::all_of(m_Storage, [](std::byte b) { return b == std::byte{ 0 }; }))
@@ -507,6 +512,7 @@ namespace Nano
                     }
                 }
                 else
+                #endif
                 {
                     CheckConstructed();
                     reinterpret_cast<T*>(m_Storage)->~T();
@@ -545,6 +551,7 @@ namespace Nano
             new (m_Storage) T(std::forward<Args>(args)...);
         }
 
+        #if defined(NANO_EXPERIMENTAL)
         inline void Destroy() noexcept(std::is_nothrow_destructible_v<T>) requires(Destroyable)
         {
             CheckConstructed();
@@ -558,6 +565,7 @@ namespace Nano
             m_Constructed = false;
             #endif
         }
+        #endif
 
     private:
         // Debug method
@@ -710,7 +718,111 @@ namespace Nano
     ////////////////////////////////////////////////////////////////////////////////////
     // ArenaAllocator
     ////////////////////////////////////////////////////////////////////////////////////
-    // TODO: ...
+    template<size_t Size = 1 << 20, bool TrackDestructors = true>
+    class ArenaAllocator // Note: Allocates in blocks
+    {
+    private:
+        struct Tracked
+        {
+        public:
+            using DestructorFn = void (*)(void* object);
+        public:
+            void* Object;
+            DestructorFn Destructor;
+        };
+
+        template<bool Track> struct TrackedObjects  { std::vector<Tracked> Objects = { }; };
+        template<> struct TrackedObjects<false>     { };
+
+        struct Block // Note: The capacity is the index + 1 times the templated Size
+        {
+        public:
+            std::byte* Data;
+            size_t Used;
+        };
+    public:
+        // Constructor & Destructor
+        ArenaAllocator()
+        {
+            AllocateBlock();
+        }
+        ~ArenaAllocator()
+        {
+            ResetBlocks();
+        }
+
+        // Methods
+        template<typename T, typename ...TArgs>
+        T& Allocate(TArgs&& ...args)
+        {
+            void* memory = Allocate(sizeof(T), alignof(T));
+            T* obj = new (memory) T(std::forward<TArgs>(args)...);
+
+            if constexpr (TrackDestructors && !std::is_trivially_destructible_v<T>)
+                m_Tracked.Objects.emplace_back(obj, [](void* p) { static_cast<T*>(p)->~T(); });
+            
+            return *obj;
+        }
+
+        // Extra
+        void ReserveTracked(size_t objectCount) requires(TrackDestructors)
+        {
+            m_Tracked.Objects.reserve(objectCount);
+        }
+
+        void ReserveBlocks(size_t blockCount)
+        {
+            m_Blocks.reserve(blockCount);
+        }
+
+    private:
+        // Private methods
+        void AllocateBlock() 
+        {
+            size_t capacity = Size * (m_Blocks.size() + 1);
+            m_Blocks.emplace_back(new std::byte[capacity], 0ull);
+        }
+
+        void* Allocate(size_t size, size_t alignment = alignof(std::max_align_t)) 
+        {
+            if (m_Blocks.empty() || m_Blocks.back().Used + size + alignment > (m_Blocks.size() * Size))
+                AllocateBlock();
+
+            auto& b = m_Blocks.back();
+
+            size_t current = reinterpret_cast<size_t>(b.Data + b.Used);
+            size_t aligned = (current + alignment - 1) & ~(alignment - 1);
+            size_t padding = aligned - current;
+
+            if (b.Used + padding + size > (m_Blocks.size() * Size))
+            {
+                AllocateBlock();
+                return Allocate(size, alignment); // Retry on new block
+            }
+
+            void* ptr = b.Data + b.Used + padding;
+            b.Used += padding + size;
+            return ptr;
+        }
+
+        void ResetBlocks()
+        {
+            if constexpr (TrackDestructors)
+            {
+                for (auto des = m_Tracked.Objects.rbegin(); des != m_Tracked.Objects.rend(); des++)
+                    des->Destructor(des->Object);
+            }
+
+            for (auto block = m_Blocks.rbegin(); block != m_Blocks.rend(); block++)
+                delete[] block->Data;
+        }
+
+    private:
+        std::vector<Block> m_Blocks = { };
+
+        [[no_unique_address]]
+        TrackedObjects<TrackDestructors> m_Tracked = {};
+    };
 
 }
 
@@ -854,6 +966,26 @@ namespace Nano::Internal::Types
         (func.template operator()<std::tuple_element_t<I, Tuple>>(), ...);
     }
 
+    template<size_t Index, typename ...RemoveTypes, typename ...Types, typename ...NewTypes>
+    constexpr auto TupleRemoveTypes(const std::tuple<Types...>& values, const std::tuple<NewTypes...>& newTuple)
+    {
+        if constexpr (Index < TupleTypeCount<std::tuple<Types...>>)
+        {
+            if constexpr (TupleContains<TupleIndexedType<Index, std::tuple<Types...>>, std::tuple<RemoveTypes...>>::value)
+            {
+                return TupleRemoveTypes<Index + 1, RemoveTypes...>(values, newTuple);
+            }
+            else
+            {
+                return TupleRemoveTypes<Index + 1, RemoveTypes...>(values, std::tuple_cat(newTuple, std::tuple<TupleIndexedType<Index, std::tuple<Types...>>>{ std::get<Index>(values) }));
+            }
+        }
+        else
+        {
+            return newTuple;
+        }
+    }
+
 }
 
 namespace Nano::Types
@@ -872,21 +1004,27 @@ namespace Nano::Types
     // Tuple
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename Tuple>
-    inline constexpr size_t TupleTypeCount = Nano::Internal::Types::TupleTypeCount<Tuple>;
+    inline constexpr size_t TupleTypeCount = Nano::Internal::Types::TupleTypeCount<std::decay_t<Tuple>>;
 
     template<size_t Index, typename Tuple>
-    using TupleIndexedType = Nano::Internal::Types::TupleIndexedType<Index, Tuple>;
+    using TupleIndexedType = Nano::Internal::Types::TupleIndexedType<Index, std::decay_t<Tuple>>;
 
     template<typename T, typename Tuple>
-    inline constexpr size_t TupleTypeIndex = Nano::Internal::Types::TupleTypeToIndex<T, Tuple, 0>();
+    inline constexpr size_t TupleTypeIndex = Nano::Internal::Types::TupleTypeToIndex<T, std::decay_t<Tuple>, 0>();
 
     template<typename T, typename Tuple>
-    inline constexpr bool TupleContains = Nano::Internal::Types::TupleContains<T, Tuple>::value;
+    inline constexpr bool TupleContains = Nano::Internal::Types::TupleContains<T, std::decay_t<Tuple>>::value;
 
     template<typename Tuple, typename TFunc>
     constexpr void ForEachTypeInTuple(TFunc&& func)
     {
-        Nano::Internal::Types::ForEachTypeInTuple<Tuple>(std::forward<TFunc>(func), std::make_index_sequence<TupleTypeCount<Tuple>>{});
+        Nano::Internal::Types::ForEachTypeInTuple<Tuple>(std::forward<TFunc>(func), std::make_index_sequence<TupleTypeCount<std::decay_t<Tuple>>>{});
+    }
+
+    template<typename ...RemoveTypes, typename ...Types>
+    constexpr auto TupleRemoveTypes(const std::tuple<Types...>& values)
+    {
+        return Nano::Internal::Types::TupleRemoveTypes<0, RemoveTypes...>(values, std::tuple{});
     }
 
 }
@@ -894,7 +1032,7 @@ namespace Nano::Types
 
 ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
-// --- Enum HPP ---
+// --- Enum HPP --- // TODO: Make use of StaticString to avoid bloating exe
 ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
 namespace Nano::Enum
@@ -2170,19 +2308,25 @@ namespace Nano::Internal::ECS
             // Methods
             void Satisfy()
             {
-                while (m_Current != m_End) 
+                if constexpr (sizeof...(Components) == 1)
+                    return;
+                else
                 {
-                    ID id = *m_Current;
+                    while (m_Current != m_End) 
+                    {
+                        ID id = *m_Current;
 
-                    if ((std::get<SparseSet<Components, ID>&>(m_Sets).Has(id) && ...))
-                        break;
+                        if ((std::get<SparseSet<Components, ID>&>(m_Sets).Has(id) && ...))
+                            break;
 
-                    ++m_Current;
+                        ++m_Current;
+                    }
                 }
             }
 
             // Operators
             inline bool operator == (const TypeIterator& other) const { return m_Current == other.m_Current; }
+            inline bool operator != (const TypeIterator& other) const { return !(*this == other); }
             
             auto operator * () const 
             { 
@@ -2222,17 +2366,22 @@ namespace Nano::Internal::ECS
             // Methods
             void Satisfy()
             {
-                while (m_Current != m_End)
+                if constexpr (sizeof...(Components) == 1)
+                    return;
+                else
                 {
-                    ID id = *m_Current;
-                    if (SatisfyImpl(id, std::index_sequence_for<Components...>{}))
-                        break;
-                    ++m_Current;
+                    while (m_Current != m_End)
+                    {
+                        ID id = *m_Current;
+                        if (SatisfyImpl(id, std::index_sequence_for<Components...>{}))
+                            break;
+                        ++m_Current;
+                    }
                 }
             }
 
             // Operators
-            IndexIterator& operator++()
+            IndexIterator& operator ++ ()
             {
                 ++m_Current;
                 Satisfy();
@@ -2272,6 +2421,34 @@ namespace Nano::Internal::ECS
         inline ComponentView(std::span<const ID> id, SparseSetsTuple&& sets)
             : m_IDs(id), m_Sets(std::move(sets)) {}
         ~ComponentView() = default;
+
+        // Methods
+        template<typename TFunc>
+        void ForEach(TFunc&& func)
+        {
+            if constexpr (std::invocable<TFunc, const ID&, std::add_lvalue_reference_t<Components>...> || 
+                std::invocable<TFunc, const ID&, std::add_lvalue_reference_t<const Components>...> ||
+                std::invocable<TFunc, ID&, std::add_lvalue_reference_t<Components>...> ||
+                std::invocable<TFunc, ID&, std::add_lvalue_reference_t<const Components>...>)
+            {
+                for (Iterator it = begin(); it != end(); ++it)
+                {
+                    std::apply(func, *it);
+                }
+            }
+            else if constexpr (std::invocable<TFunc, std::add_lvalue_reference_t<Components>...> || 
+                std::invocable<TFunc, std::add_lvalue_reference_t<const Components>...>)
+            {
+                for (Iterator it = begin(); it != end(); ++it)
+                {
+                    std::apply(func, ::Nano::Types::TupleRemoveTypes<ID>(*it));
+                }
+            }
+            else
+            {
+                static_assert(false, "Function doesn't match allowed structures.");
+            }
+        }
 
         // Iterators
         inline Iterator begin() const { return Iterator(m_IDs.data(), m_IDs.data() + m_IDs.size(), m_Sets); }
@@ -2324,9 +2501,15 @@ namespace Nano::ECS
         template<typename TComponent>
         [[nodiscard]] auto View() requires(Nano::Types::TupleContains<TComponent, TypesTuple>)
         {
+            /*
             auto& set = m_Storage.template GetSparseSet<TComponent>();
             NANO_ASSERT((set.GetIDs().size() == set.GetValues().size()), "Amount of entities doesn't equal amount of components.");
             return std::ranges::views::zip(set.GetIDs(), set.GetValues());
+            */
+            
+            std::span<const ID> ids = m_Storage.template GetSparseSet<TComponent>().GetIDs();
+            auto sets = std::forward_as_tuple(m_Storage.template GetSparseSet<TComponent>());
+            return Internal::ECS::ComponentView<ID, TComponent>{ ids, std::move(sets) };
         }
 
         template<typename ...TComponents>
@@ -2830,7 +3013,12 @@ namespace Nano::Internal
                     uint8_t numCount = Nano::Maths::CountNumbers(time);
                     std::string numStr = Nano::Maths::ToString(time);
 
-                    if (numCount > 6)
+                    if (numCount > 9)
+                    {
+                        numStr.insert(static_cast<size_t>(numCount) - 9, ".");
+                        numStr = numStr.substr(0, floatPointFormat.size()) + "s";
+                    }
+                    else if (numCount > 6)
                     {
                         numStr.insert(static_cast<size_t>(numCount) - 6, ".");
                         numStr = numStr.substr(0, floatPointFormat.size()) + "ms";
