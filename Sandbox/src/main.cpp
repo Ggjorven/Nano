@@ -350,19 +350,19 @@ NANO_BENCHMARK_INIT("FixedStack")
         Nano::FixedStack<1024, true> fixedStack = {};
     };
 
-    Nano::FixedStack<1024, true> fixedStack1KiB_T = {};
     NANO_BENCHMARK_AUTO("1KiB-T")
     {
-        for (size_t i = 0; i < (((1024) / sizeof(NonTrivial))) - 1; i++)
+        Nano::FixedStack<1024, true> fixedStack1KiB_T = {};
+        for (size_t i = 0; i < ((1024 / sizeof(NonTrivial)) - 1); i++)
         {
             (void)fixedStack1KiB_T.Allocate<NonTrivial>(69);
         }
     };
 
-    Nano::FixedStack<1024, false> fixedStack1KiB_UT = {};
     NANO_BENCHMARK_AUTO("1KiB-UT")
     {
-        for (size_t i = 0; i < (((1024) / sizeof(int))) - 1; i++)
+        Nano::FixedStack<1024, false> fixedStack1KiB_UT = {};
+        for (size_t i = 0; i < ((1024 / sizeof(NonTrivial)) - 1); i++)
         {
             (void)fixedStack1KiB_UT.Allocate<int>(69);
         }
@@ -377,19 +377,19 @@ NANO_BENCHMARK_INIT("Arena")
         Nano::ArenaAllocator<1 << 20, true> arenaAllocator = {};
     };
 
-    Nano::ArenaAllocator<1 << 20, true> arenaAllocator1MiB_T = {};
     NANO_BENCHMARK_AUTO("1MiB-T")
     {
-        for (size_t i = 0; i < (((1ull << 20ull) / sizeof(NonTrivial))) - 1; i++)
+        Nano::ArenaAllocator<1 << 20, true> arenaAllocator1MiB_T = {};
+        for (size_t i = 0; i < ((1ull << 20ull) / sizeof(NonTrivial)) - 1; i++)
         {
             (void)arenaAllocator1MiB_T.Allocate<NonTrivial>(69);
         }
     };
 
-    Nano::ArenaAllocator<1 << 20, false> arenaAllocator1MiB_UT = {};
     NANO_BENCHMARK_AUTO("1MiB-UT")
     {
-        for (size_t i = 0; i < (((1ull << 20ull) / sizeof(int))) - 1; i++)
+        Nano::ArenaAllocator<1 << 20, false> arenaAllocator1MiB_UT = {};
+        for (size_t i = 0; i < ((1ull << 20ull) / sizeof(int)) - 1; i++)
         {
             (void)arenaAllocator1MiB_UT.Allocate<int>(69);
         }
