@@ -117,6 +117,19 @@ NANO_TEST_CASE("Types")
         NANO_TEST_BOOL(!(Nano::Types::TupleContains<unsigned int, decltype(second)>));
         NANO_TEST_BOOL(!(Nano::Types::TupleContains<float, decltype(second)>));
     }
+    {
+        enum class Platform : uint8_t { Windows = 0, Linux };
+        struct WindowsWindow;
+        struct LinuxWindow;
+
+        using T = Nano::Types::SelectorType<
+            Platform::Windows,
+            Nano::Types::EnumToType<Platform::Windows, WindowsWindow>,
+            Nano::Types::EnumToType<Platform::Linux, LinuxWindow>
+        >;
+
+        NANO_TEST_BOOL((std::is_same_v<T, WindowsWindow>));
+    }
 }
 
 // Functional

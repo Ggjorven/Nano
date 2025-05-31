@@ -81,6 +81,50 @@
     #define NANO_PLATFORM_APPLE
 #endif
 
+// Cpp standard
+#define NANO_CPPSTD_UNKOWN 0
+#define NANO_CPPSTD_11 11
+#define NANO_CPPSTD_14 14
+#define NANO_CPPSTD_17 17
+#define NANO_CPPSTD_20 20
+#define NANO_CPPSTD_23 23
+#define NANO_CPPSTD_26 26
+#define NANO_CPPSTD_LATEST NANO_CPPSTD_26
+
+#if defined(NANO_COMPILER_MSVC)
+    #if _MSVC_LANG >= 202602L
+        #define NANO_CPPSTD NANO_CPPSTD_26
+    #elif _MSVC_LANG >= 202302L
+        #define NANO_CPPSTD NANO_CPPSTD_23
+    #elif _MSVC_LANG >= 202002L
+        #define NANO_CPPSTD NANO_CPPSTD_20
+    #elif _MSVC_LANG >= 201703L
+        #define NANO_CPPSTD NANO_CPPSTD_17
+    #elif _MSVC_LANG >= 201402L
+        #define NANO_CPPSTD NANO_CPPSTD_14
+    #elif _MSVC_LANG >= 201103L
+        #define NANO_CPPSTD NANO_CPPSTD_11
+    #else
+        #define NANO_CPPSTD NANO_CPPSTD_UNKOWN
+    #endif
+#else
+    #if __cplusplus == 202602L
+        #define NANO_CPPSTD NANO_CPPSTD_26
+    #elif __cplusplus >= 202302L
+        #define NANO_CPPSTD NANO_CPPSTD_23
+    #elif __cplusplus >= 202002L
+        #define NANO_CPPSTD NANO_CPPSTD_20
+    #elif __cplusplus >= 201703L
+        #define NANO_CPPSTD NANO_CPPSTD_17
+    #elif __cplusplus >= 201402L
+        #define NANO_CPPSTD NANO_CPPSTD_14
+    #elif __cplusplus >= 201103L
+        #define NANO_CPPSTD NANO_CPPSTD_11
+    #else
+        #define NANO_CPPSTD NANO_CPPSTD_UNKOWN
+    #endif
+#endif
+
 // Debug-break
 #if defined(NANO_PLATFORM_WINDOWS)
     #include <intrin.h>
@@ -144,6 +188,84 @@ inline static const char _RunDummy##id = (_Run##id(), 0)
 
 #define NANO_RUN_FUNCTION(functionName, ...)				    NANO_RUN_FUNCTION_HELPER(__COUNTER__, functionName, __VA_ARGS__)
 #define NANO_RUN_FUNCTION_NN(functionName, ...)			    NANO_RUN_FUNCTION_NN_HELPER(__COUNTER__, functionName, __VA_ARGS__)
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- CompileInformation HPP
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+namespace Nano::CompileInformation
+{
+
+    namespace Structs
+    {
+
+        ////////////////////////////////////////////////////////////////////////////////////
+        // Structs
+        ////////////////////////////////////////////////////////////////////////////////////
+        enum class Compiler : uint8_t
+        {
+            Unknown = 0,
+
+            MSVC,
+            GCC,
+            Clang
+        };
+
+        enum class Platform : uint8_t
+        {
+            Unknown = 0,
+
+            Windows,
+            Linux,
+            MacOS,
+
+            Android,
+            iOS,
+        };
+
+        enum class CppStd : uint8_t
+        {
+            Unknown = NANO_CPPSTD_UNKOWN,
+
+            Cpp11 = NANO_CPPSTD_11,
+            Cpp14 = NANO_CPPSTD_14,
+            Cpp17 = NANO_CPPSTD_17,
+            Cpp20 = NANO_CPPSTD_20,
+            Cpp23 = NANO_CPPSTD_23,
+            Cpp26 = NANO_CPPSTD_26,
+        };
+
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Values
+    ////////////////////////////////////////////////////////////////////////////////////
+    #if defined(NANO_COMPILER_MSVC)
+        inline constexpr const Structs::Compiler Compiler = Structs::Compiler::MSVC;
+    #elif defined(NANO_COMPILER_GCC)
+        inline constexpr const Structs::Compiler Compiler = Structs::Compiler::GCC;
+    #elif defined(NANO_COMPILER_CLANG)
+        inline constexpr const Structs::Compiler Compiler = Structs::Compiler::Clang;
+    #else
+        inline constexpr const Structs::Compiler Compiler = Structs::Compiler::Unknown;
+    #endif
+
+    #if defined(NANO_PLATFORM_WINDOWS)
+        inline constexpr const Structs::Platform Platform = Structs::Platform::Windows;
+    #elif defined(NANO_PLATFORM_LINUX) 
+        inline constexpr const Structs::Platform Platform = Structs::Platform::Linux;
+    #elif defined(NANO_PLATFORM_MACOS)
+        inline constexpr const Structs::Platform Platform = Structs::Platform::MacOS;
+    #elif defined(NANO_PLATFORM_ANDROID)
+        inline constexpr const Structs::Platform Platform = Structs::Platform::Android;
+    #elif defined(NANO_PLATFORM_IOS)
+        inline constexpr const Structs::Platform Platform = Structs::Platform::iOS;
+    #endif
+
+    inline constexpr const Structs::CppStd CppStd = static_cast<Structs::CppStd>(NANO_CPPSTD);
+
+}
 
 ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
@@ -933,6 +1055,25 @@ namespace Nano::Memory
 // --- Types HPP ---
 ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
+namespace Nano::Types
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Selector
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<auto E, typename T> requires(std::is_enum_v<decltype(E)>)
+    struct EnumToType
+    {
+    public:
+        inline static constexpr bool IsEnumToType = true;
+    public:
+        inline static constexpr auto Value = E;
+        using Type = T;
+    };
+
+}
+
+
 namespace Nano::Internal::Types
 {
 
@@ -1030,6 +1171,12 @@ namespace Nano::Internal::Types
     };
 
     ////////////////////////////////////////////////////////////////////////////////////
+    // TypeWrapper
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename T>
+    struct TypeWrapper { using Type = T; };
+
+    ////////////////////////////////////////////////////////////////////////////////////
     // Tuple
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename Tuple>
@@ -1063,13 +1210,13 @@ namespace Nano::Internal::Types
     struct TupleContains<T, std::tuple<Types...>> : std::bool_constant<(std::is_same_v<T, Types> || ...)> {};
 
     template<typename Tuple, typename TFunc, std::size_t... I>
-    constexpr void ForEachTypeInTuple(TFunc&& func, std::index_sequence<I...>)
+    [[nodiscard]] void ForEachTypeInTuple(TFunc&& func, std::index_sequence<I...>)
     {
         (func.template operator()<std::tuple_element_t<I, Tuple>>(), ...);
     }
 
     template<size_t Index, typename ...RemoveTypes, typename ...Types, typename ...NewTypes>
-    constexpr auto TupleRemoveTypes(const std::tuple<Types...>& values, const std::tuple<NewTypes...>& newTuple)
+    [[nodiscard]] constexpr auto TupleRemoveTypes(const std::tuple<Types...>& values, const std::tuple<NewTypes...>& newTuple)
     {
         if constexpr (Index < TupleTypeCount<std::tuple<Types...>>)
         {
@@ -1087,6 +1234,39 @@ namespace Nano::Internal::Types
             return newTuple;
         }
     }
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Selector
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<size_t Index, typename TEnum, TEnum EValue, typename ...EnumToTypes>
+    [[nodiscard]] consteval auto Selector() noexcept(true)
+    {
+        using TypesTuple = std::tuple<EnumToTypes...>;
+
+        if constexpr (Index < TupleTypeCount<TypesTuple>)
+        {
+            using T = TupleIndexedType<Index, TypesTuple>;
+
+            constexpr TEnum compValue = T::Value;
+            using RetType = T::Type;
+
+            if constexpr (compValue == EValue)
+            {
+                return TypeWrapper<RetType>();
+            }
+            else
+            {
+                return Selector<Index + 1, TEnum, EValue, EnumToTypes...>();
+            }
+        }
+        else
+        {
+            static_assert(false, "Value not found in EnumToTypes...");
+        }
+    }
+
+    template<auto EValue, typename ...EnumToTypes> requires(std::is_enum_v<decltype(EValue)>&& requires { ((EnumToTypes::IsEnumToType) && ...); })
+    using SelectorType = decltype(Selector<0, decltype(EValue), EValue, EnumToTypes...>());
 
 }
 
@@ -1128,6 +1308,12 @@ namespace Nano::Types
     {
         return Nano::Internal::Types::TupleRemoveTypes<0, RemoveTypes...>(values, std::tuple{});
     }
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Selector
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<auto EValue, typename ...EnumToTypes> requires(std::is_enum_v<decltype(EValue)>&& requires { ((EnumToTypes::IsEnumToType) && ...); })
+    using SelectorType = Internal::Types::SelectorType<EValue, EnumToTypes...>::Type; 
 
 }
 

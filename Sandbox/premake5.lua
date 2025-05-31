@@ -22,7 +22,7 @@ project "Sandbox"
 		"src/**.inl",
 		"src/**.cpp",
 
-		"%{wks.location}/Nano/include/Nano.hpp",
+		"%{wks.location}/Nano/include/Nano/Nano.hpp",
 	}
 
 	defines
