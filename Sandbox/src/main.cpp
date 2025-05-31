@@ -1,6 +1,6 @@
 #define NANO_IMPLEMENTATION
 #define NANO_EXPERIMENTAL
-#include "Nano.hpp"
+#include "Nano/Nano.hpp"
 
 ////////////////////////////////////////////////////////////////////////////////////
 // Pre-defines
