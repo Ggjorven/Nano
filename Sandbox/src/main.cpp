@@ -157,7 +157,7 @@ NANO_TEST_CASE("Enum")
 // DeferredConstruct
 NANO_TEST_CASE("DeferredConstruct")
 {
-    Nano::DeferredConstruct<Deferred> defer;
+    Nano::Memory::DeferredConstruct<Deferred> defer;
     defer.Construct(10);
 
     NANO_TEST_EQUALS(defer->X, 10);
@@ -183,7 +183,7 @@ NANO_TEST_CASE("ScopeExit")
     int i = 0;
 
     {
-        Nano::ScopeExit exit([&]() { i = 1; });
+        Nano::Utils::ScopeExit exit([&]() { i = 1; });
         NANO_TEST_EQUALS(i, 0);
     }
 
@@ -347,12 +347,12 @@ NANO_BENCHMARK_INIT("FixedStack")
 {
     NANO_BENCHMARK_AUTO("Init-1KiB")
     {
-        Nano::FixedStack<1024, true> fixedStack = {};
+        Nano::Memory::FixedStack<1024, true> fixedStack = {};
     };
 
     NANO_BENCHMARK_AUTO("1KiB-T")
     {
-        Nano::FixedStack<1024, true> fixedStack1KiB_T = {};
+        Nano::Memory::FixedStack<1024, true> fixedStack1KiB_T = {};
         for (size_t i = 0; i < ((1024 / sizeof(NonTrivial)) - 1); i++)
         {
             (void)fixedStack1KiB_T.Allocate<NonTrivial>(69);
@@ -361,7 +361,7 @@ NANO_BENCHMARK_INIT("FixedStack")
 
     NANO_BENCHMARK_AUTO("1KiB-UT")
     {
-        Nano::FixedStack<1024, false> fixedStack1KiB_UT = {};
+        Nano::Memory::FixedStack<1024, false> fixedStack1KiB_UT = {};
         for (size_t i = 0; i < ((1024 / sizeof(NonTrivial)) - 1); i++)
         {
             (void)fixedStack1KiB_UT.Allocate<int>(69);
@@ -374,12 +374,12 @@ NANO_BENCHMARK_INIT("Arena")
 {
     NANO_BENCHMARK_AUTO("Init-1MiB")
     {
-        Nano::ArenaAllocator<1 << 20, true> arenaAllocator = {};
+        Nano::Memory::ArenaAllocator<1 << 20, true> arenaAllocator = {};
     };
 
     NANO_BENCHMARK_AUTO("1MiB-T")
     {
-        Nano::ArenaAllocator<1 << 20, true> arenaAllocator1MiB_T = {};
+        Nano::Memory::ArenaAllocator<1 << 20, true> arenaAllocator1MiB_T = {};
         for (size_t i = 0; i < ((1ull << 20ull) / sizeof(NonTrivial)) - 1; i++)
         {
             (void)arenaAllocator1MiB_T.Allocate<NonTrivial>(69);
@@ -388,7 +388,7 @@ NANO_BENCHMARK_INIT("Arena")
 
     NANO_BENCHMARK_AUTO("1MiB-UT")
     {
-        Nano::ArenaAllocator<1 << 20, false> arenaAllocator1MiB_UT = {};
+        Nano::Memory::ArenaAllocator<1 << 20, false> arenaAllocator1MiB_UT = {};
         for (size_t i = 0; i < ((1ull << 20ull) / sizeof(int)) - 1; i++)
         {
             (void)arenaAllocator1MiB_UT.Allocate<int>(69);
@@ -402,25 +402,25 @@ NANO_BENCHMARK_INIT("Random")
     NANO_BENCHMARK_AUTO("Int-10'000")
     {
         for (size_t i = 0; i < 10'000; i++)
-            (void)Nano::Random::Int();
+            (void)Nano::Random::Random::Int();
     };
 
     NANO_BENCHMARK_AUTO("UInt-10'000")
     {
         for (size_t i = 0; i < 10'000; i++)
-            (void)Nano::Random::UInt();
+            (void)Nano::Random::Random::UInt();
     };
 
     NANO_BENCHMARK_AUTO("Float-10'000")
     {
         for (size_t i = 0; i < 10'000; i++)
-            (void)Nano::Random::Float();
+            (void)Nano::Random::Random::Float();
     };
 
     NANO_BENCHMARK_AUTO("Double-10'000")
     {
         for (size_t i = 0; i < 10'000; i++)
-            (void)Nano::Random::Double();
+            (void)Nano::Random::Random::Double();
     };
 }
 
@@ -430,25 +430,25 @@ NANO_BENCHMARK_INIT("FastRandom")
     NANO_BENCHMARK_AUTO("Int-10'000")
     {
         for (size_t i = 0; i < 10'000; i++)
-            (void)Nano::FastRandom::Int();
+            (void)Nano::Random::FastRandom::Int();
     };
 
     NANO_BENCHMARK_AUTO("UInt-10'000")
     {
         for (size_t i = 0; i < 10'000; i++)
-            (void)Nano::FastRandom::UInt();
+            (void)Nano::Random::FastRandom::UInt();
     };
 
     NANO_BENCHMARK_AUTO("Float-10'000")
     {
         for (size_t i = 0; i < 10'000; i++)
-            (void)Nano::FastRandom::Float();
+            (void)Nano::Random::FastRandom::Float();
     };
 
     NANO_BENCHMARK_AUTO("Double-10'000")
     {
         for (size_t i = 0; i < 10'000; i++)
-            (void)Nano::FastRandom::Double();
+            (void)Nano::Random::FastRandom::Double();
     };
 }
 

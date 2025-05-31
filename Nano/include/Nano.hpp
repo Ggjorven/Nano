@@ -480,7 +480,7 @@ namespace Nano
 // --- Memory HPP ---
 ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
-namespace Nano
+namespace Nano::Memory
 {
 
     ////////////////////////////////////////////////////////////////////////////////////
@@ -715,6 +715,7 @@ namespace Nano
         std::array<char, N + 1> m_Content = {};
     };
 
+#if defined(NANO_EXPERIMENTAL)
     ////////////////////////////////////////////////////////////////////////////////////
     // FixedStack
     ////////////////////////////////////////////////////////////////////////////////////
@@ -923,6 +924,7 @@ namespace Nano
         [[no_unique_address]]
         TrackedObjects<TrackDestructors> m_Tracked = {};
     };
+#endif
 
 }
 
@@ -1497,7 +1499,7 @@ namespace Nano::Enum
 // --- Scope HPP ---
 ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
-namespace Nano
+namespace Nano::Utils
 {
 
     ////////////////////////////////////////////////////////////////////////////////////
@@ -1733,7 +1735,7 @@ namespace Nano::Time
 // --- Random HPP ---
 ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
-namespace Nano
+namespace Nano::Random
 {
 
     ////////////////////////////////////////////////////////////////////////////////////
@@ -1866,7 +1868,7 @@ namespace Nano
 ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
 #if defined(NANO_IMPL_RANDOM)
-namespace Nano
+namespace Nano::Random
 {
 
     ////////////////////////////////////////////////////////////////////////////////////
@@ -1953,7 +1955,7 @@ namespace Nano::Maths
 // --- ErrorHandling HPP ---
 ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
-namespace Nano
+namespace Nano::Errors
 {
 
     ////////////////////////////////////////////////////////////////////////////////////
@@ -2322,7 +2324,7 @@ namespace Nano::Internal::ECS
     {
     public:
         using TypesTuple = std::tuple<Components...>;
-        using StorageTuple = std::tuple<SparseSet<Components, ID>...>;
+        using StorageTuple = std::tuple<Memory::SparseSet<Components, ID>...>;
     public:
         // Constructor & Destructor
         Storage() = default;
@@ -2332,51 +2334,51 @@ namespace Nano::Internal::ECS
         template<typename TComponent>
         void AddComponent(ID id, const TComponent& component) requires(Nano::Types::TupleContains<TComponent, TypesTuple> && std::is_copy_constructible_v<TComponent>)
         {
-            std::get<SparseSet<TComponent, ID>>(m_Components).Add(id, component);
+            std::get<Memory::SparseSet<TComponent, ID>>(m_Components).Add(id, component);
         }
 
         template<typename TComponent>
         void AddComponent(ID id, TComponent&& component) requires(Nano::Types::TupleContains<TComponent, TypesTuple>&& std::is_move_constructible_v<TComponent>)
         {
-            std::get<SparseSet<TComponent, ID>>(m_Components).Add(id, std::move(component));
+            std::get<Memory::SparseSet<TComponent, ID>>(m_Components).Add(id, std::move(component));
         }
 
         template<typename TComponent, typename ...TArgs>
         void AddComponent(ID id, TArgs&& ...args) requires(Nano::Types::TupleContains<TComponent, TypesTuple>&& std::is_constructible_v<TComponent, TArgs...>)
         {
-            std::get<SparseSet<TComponent, ID>>(m_Components).Add(id, std::forward<TArgs>(args)...);
+            std::get<Memory::SparseSet<TComponent, ID>>(m_Components).Add(id, std::forward<TArgs>(args)...);
         }
 
         template<typename TComponent>
         void RemoveComponent(ID id) requires(Nano::Types::TupleContains<TComponent, TypesTuple>)
         {
-            std::get<SparseSet<TComponent, ID>>(m_Components).Remove(id);
+            std::get<Memory::SparseSet<TComponent, ID>>(m_Components).Remove(id);
         }
 
         // Getters
         template<typename TComponent>
         [[nodiscard]] bool HasComponent(ID id) const requires(Nano::Types::TupleContains<TComponent, TypesTuple>)
         {
-            return std::get<SparseSet<TComponent, ID>>(m_Components).Has(id);
+            return std::get<Memory::SparseSet<TComponent, ID>>(m_Components).Has(id);
         }
 
         template<typename TComponent>
         [[nodiscard]] TComponent& GetComponent(ID id) requires(Nano::Types::TupleContains<TComponent, TypesTuple>)
         {
-            return std::get<SparseSet<TComponent, ID>>(m_Components).Get(id);
+            return std::get<Memory::SparseSet<TComponent, ID>>(m_Components).Get(id);
         }
 
         template<typename TComponent>
         [[nodiscard]] const TComponent& GetComponent(ID id) const requires(Nano::Types::TupleContains<TComponent, TypesTuple>)
         {
-            return std::get<SparseSet<TComponent, ID>>(m_Components).Get(id);
+            return std::get<Memory::SparseSet<TComponent, ID>>(m_Components).Get(id);
         }
 
         // Internal
         template<typename TComponent>
-        inline SparseSet<TComponent, ID>& GetSparseSet() requires(Nano::Types::TupleContains<TComponent, TypesTuple>) { return std::get<SparseSet<TComponent, ID>>(m_Components); }
+        inline Memory::SparseSet<TComponent, ID>& GetSparseSet() requires(Nano::Types::TupleContains<TComponent, TypesTuple>) { return std::get<Memory::SparseSet<TComponent, ID>>(m_Components); }
         template<typename TComponent>
-        inline const SparseSet<TComponent, ID>& GetSparseSet() const requires(Nano::Types::TupleContains<TComponent, TypesTuple>) { return std::get<SparseSet<TComponent, ID>>(m_Components); }
+        inline const Memory::SparseSet<TComponent, ID>& GetSparseSet() const requires(Nano::Types::TupleContains<TComponent, TypesTuple>) { return std::get<Memory::SparseSet<TComponent, ID>>(m_Components); }
 
     private:
         StorageTuple m_Components;
@@ -2389,7 +2391,7 @@ namespace Nano::Internal::ECS
     class ComponentView final : public Nano::Traits::NoCopy
     {
     public:
-        using SparseSetsTuple = std::tuple<std::add_lvalue_reference_t<SparseSet<Components, ID>>...>;
+        using SparseSetsTuple = std::tuple<std::add_lvalue_reference_t<Memory::SparseSet<Components, ID>>...>;
     public:
         ////////////////////////////////////////////////////////////////////////////////////
         // TypeIterator
@@ -2416,7 +2418,7 @@ namespace Nano::Internal::ECS
                     {
                         ID id = *m_Current;
 
-                        if ((std::get<SparseSet<Components, ID>&>(m_Sets).Has(id) && ...))
+                        if ((std::get<Memory::SparseSet<Components, ID>&>(m_Sets).Has(id) && ...))
                             break;
 
                         ++m_Current;
@@ -2431,7 +2433,7 @@ namespace Nano::Internal::ECS
             auto operator * () const 
             { 
                 ID id = *m_Current;
-                return std::tuple<ID, std::add_lvalue_reference_t<Components>...>{ id, std::get<SparseSet<Components, ID>&>(m_Sets).Get(id)... };
+                return std::tuple<ID, std::add_lvalue_reference_t<Components>...>{ id, std::get<Memory::SparseSet<Components, ID>&>(m_Sets).Get(id)... };
             }
             TypeIterator& operator ++ ()
             {
@@ -2452,7 +2454,7 @@ namespace Nano::Internal::ECS
         struct IndexIterator
         {
         public:
-            using PtrTuple = std::tuple<std::add_pointer_t<SparseSet<Components, ID>>...>;
+            using PtrTuple = std::tuple<std::add_pointer_t<Memory::SparseSet<Components, ID>>...>;
         public:
             // Constructor & Destructor
             IndexIterator(const ID* beginID, const ID* endID, const SparseSetsTuple& sets)
@@ -2616,7 +2618,7 @@ namespace Nano::ECS
         [[nodiscard]] auto View() requires((sizeof...(TComponents) > 1) && (Nano::Types::TupleContains<TComponents, TypesTuple> && ...))
         {
             size_t smallestSize = std::numeric_limits<size_t>::max();
-            std::variant<std::add_pointer_t<SparseSet<TComponents, ID>>...> smallest;
+            std::variant<std::add_pointer_t<Memory::SparseSet<TComponents, ID>>...> smallest;
 
             Nano::Types::ForEachTypeInTuple<std::tuple<TComponents...>>([&]<typename TComponent>()
             {
