@@ -190,6 +190,13 @@ NANO_TEST_CASE("Arena") // TODO: ...
     NANO_TEST_EQUALS(str("TODO"), str("DONE"));
 }
 
+// Refs
+NANO_TEST_CASE("Refs") // TODO: ...
+{
+    using str = std::string;
+    NANO_TEST_EQUALS(str("TODO"), str("DONE"));
+}
+
 // ScopeExit
 NANO_TEST_CASE("ScopeExit")
 {
@@ -353,6 +360,8 @@ NANO_BENCHMARK_INIT("Enum")
     };
 
     // TODO: Fusing
+
+    // TODO: Bitwise
 }
 
 // FixedStack

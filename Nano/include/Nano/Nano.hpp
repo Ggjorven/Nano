@@ -24,6 +24,7 @@
 #include <filesystem>
 #include <functional>
 #include <type_traits>
+#include <shared_mutex>
 #include <condition_variable>
 
 #include <format>
@@ -159,6 +160,7 @@
 #if defined(NANO_IMPLEMENTATION)
     #define NANO_IMPL_RANDOM
     #define NANO_IMPL_TIME
+    #define NANO_IMPL_MEMORY
     #define NANO_IMPL_THREADING
     #define NANO_IMPL_TESTS
     #define NANO_IMPL_BENCHMARKS
@@ -602,6 +604,23 @@ namespace Nano
 // --- Memory HPP ---
 ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
+namespace Nano::Internal::Memory
+{
+
+    namespace RefUtils // Note: Mainly used for supporting WeakRefs
+    {
+
+        ////////////////////////////////////////////////////////////////////////////////////
+        // Ref Utilities
+        ////////////////////////////////////////////////////////////////////////////////////
+        void AddToLiveReferences(void* instance);
+        void RemoveFromLiveReferences(void* instance);
+        bool IsLive(void* instance);
+
+    }
+
+}
+
 namespace Nano::Memory
 {
 
@@ -609,9 +628,9 @@ namespace Nano::Memory
     // DeferredConstruct<T>
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename T
-        #if defined(NANO_EXPERIMENTAL)
+#if defined(NANO_EXPERIMENTAL)
         , bool Destroyable = false
-        #endif
+#endif
     >
     class DeferredConstruct final : public Traits::NoCopy, public Traits::NoMove
     {
@@ -624,7 +643,7 @@ namespace Nano::Memory
         {
             if constexpr (!std::is_trivially_destructible_v<T>)
             {
-                #if defined(NANO_EXPERIMENTAL)
+            #if defined(NANO_EXPERIMENTAL)
                 if constexpr (Destroyable)
                 {
                     if (!std::ranges::all_of(m_Storage, [](std::byte b) { return b == std::byte{ 0 }; }))
@@ -634,7 +653,7 @@ namespace Nano::Memory
                     }
                 }
                 else
-                #endif
+            #endif
                 {
                     CheckConstructed();
                     reinterpret_cast<T*>(m_Storage)->~T();
@@ -648,8 +667,8 @@ namespace Nano::Memory
         inline operator T* ()               noexcept(true) { CheckConstructed(); return reinterpret_cast<T*>(m_Storage); }
         inline operator const T* () const   noexcept(true) { CheckConstructed(); return reinterpret_cast<const T*>(m_Storage); }
 
-        inline T* operator -> ()                { CheckConstructed(); return reinterpret_cast<T*>(m_Storage); }
-        inline const T* operator -> () const    { CheckConstructed(); return reinterpret_cast<const T*>(m_Storage); }
+        inline T* operator -> () { CheckConstructed(); return reinterpret_cast<T*>(m_Storage); }
+        inline const T* operator -> () const { CheckConstructed(); return reinterpret_cast<const T*>(m_Storage); }
 
         // Getters
         [[nodiscard]] inline T& Get()               noexcept(true) { CheckConstructed(); return *reinterpret_cast<T*>(m_Storage); }
@@ -659,7 +678,7 @@ namespace Nano::Memory
         template<typename ...Args>
         inline void Construct(Args&& ...args) noexcept(std::is_nothrow_constructible_v<T, Args...>)
         {
-            #if defined(NANO_DEBUG_DEFERREDCONSTRUCT)
+        #if defined(NANO_DEBUG_DEFERREDCONSTRUCT)
             if (m_Constructed) [[unlikely]]
             {
                 NANO_ASSERT(false, "Object already constructed."); // Object already constructed, calling destructor on previous object! Please change your implementation to avoid re-constructing, since these checks are only available in Debug mode.
@@ -668,12 +687,12 @@ namespace Nano::Memory
             }
 
             m_Constructed = true;
-            #endif
+        #endif
 
             new (m_Storage) T(std::forward<Args>(args)...);
         }
 
-        #if defined(NANO_EXPERIMENTAL)
+    #if defined(NANO_EXPERIMENTAL)
         inline void Destroy() noexcept(std::is_nothrow_destructible_v<T>) requires(Destroyable)
         {
             CheckConstructed();
@@ -683,18 +702,18 @@ namespace Nano::Memory
 
             std::memset(m_Storage, 0, sizeof(m_Storage));
 
-            #if defined(NANO_DEBUG_DEFERREDCONSTRUCT)
+        #if defined(NANO_DEBUG_DEFERREDCONSTRUCT)
             m_Constructed = false;
-            #endif
-        }
         #endif
+        }
+    #endif
 
     private:
         // Debug method
         inline void CheckConstructed() const noexcept(true)
         {
             #if defined(NANO_DEBUG_DEFERREDCONSTRUCT)
-            NANO_ASSERT(m_Constructed, "Object not constructed yet."); // Object not constructed yet.
+                NANO_ASSERT(m_Constructed, "Object not constructed yet."); // Object not constructed yet.
             #endif
         }
 
@@ -715,7 +734,7 @@ namespace Nano::Memory
         #endif
 
         #if defined(NANO_DEBUG_DEFERREDCONSTRUCT)
-            bool m_Constructed = false;
+                bool m_Constructed = false;
         #endif
     };
 
@@ -758,7 +777,7 @@ namespace Nano::Memory
         }
 
         template<typename ...Args>
-        void Add(ID id, Args&& ...args) requires (std::is_constructible_v<T, Args...>) 
+        void Add(ID id, Args&& ...args) requires (std::is_constructible_v<T, Args...>)
         {
             NANO_ASSERT(!Has(id), "Duplicate ID in SparseSet");
 
@@ -774,7 +793,7 @@ namespace Nano::Memory
         {
             using std::swap;
 
-            NANO_ASSERT(Has(id), "ID not found in SparseSet"); 
+            NANO_ASSERT(Has(id), "ID not found in SparseSet");
 
             ID idx = m_Sparse[id];
             ID last = static_cast<ID>(m_IDs.size() - 1);
@@ -805,10 +824,10 @@ namespace Nano::Memory
         [[nodiscard]] inline const std::vector<T>& GetValues()    const   noexcept(true) { return m_Values; }
 
         // Iterators
-        inline auto begin()       noexcept(true)    { return m_Values.begin(); }
-        inline auto end()         noexcept(true)    { return m_Values.end(); }
-        inline auto begin() const noexcept(true)    { return m_Values.begin(); }
-        inline auto end()   const noexcept(true)    { return m_Values.end(); }
+        inline auto begin()       noexcept(true) { return m_Values.begin(); }
+        inline auto end()         noexcept(true) { return m_Values.end(); }
+        inline auto begin() const noexcept(true) { return m_Values.begin(); }
+        inline auto end()   const noexcept(true) { return m_Values.end(); }
 
     private:
         std::vector<ID> m_Sparse = { };
@@ -854,13 +873,14 @@ namespace Nano::Memory
             DestructorFn Destructor;
         };
 
-        template<bool Track> struct TrackedObjects  { std::vector<Tracked> Objects = { }; };
-        template<> struct TrackedObjects<false>     { };
+        template<bool Track> struct TrackedObjects { std::vector<Tracked> Objects = { }; };
+        template<> struct TrackedObjects<false> {};
 
     public:
         // Constructor & Destructor
         FixedStack()
-            : m_Stack(new std::byte[Size]) {}
+            : m_Stack(new std::byte[Size]) {
+        }
         ~FixedStack()
         {
             if constexpr (TrackDestructors)
@@ -890,7 +910,7 @@ namespace Nano::Memory
         {
             size_t fullSize = sizeof(T) + GetPadding(reinterpret_cast<size_t>(object), alignof(T));
             NANO_ASSERT((static_cast<void*>(m_Stack - fullSize) == (m_Used - fullSize)), "Trying to destroy an object not on the back of the stack.");
-            
+
             auto& back = m_Tracked.Objects.back();
             NANO_ASSERT((static_cast<void*>(m_Stack - fullSize) == back.Object), "Trying to destroy an object not on the back of the stack.");
 
@@ -914,7 +934,7 @@ namespace Nano::Memory
             size_t padding = GetPadding(reinterpret_cast<size_t>(m_Stack + m_Used), alignment);
 
             NANO_ASSERT(!(m_Used + padding + size > Size), "Size + padding exceeds the Stack's max size.");
-            
+
             void* ptr = m_Stack + m_Used + padding;
             m_Used += padding + size;
             return ptr;
@@ -950,8 +970,8 @@ namespace Nano::Memory
             DestructorFn Destructor;
         };
 
-        template<bool Track> struct TrackedObjects  { std::vector<Tracked> Objects = { }; };
-        template<> struct TrackedObjects<false>     { };
+        template<bool Track> struct TrackedObjects { std::vector<Tracked> Objects = { }; };
+        template<> struct TrackedObjects<false> {};
 
         struct Block // Note: The capacity is the index + 1 times the templated Size
         {
@@ -978,8 +998,8 @@ namespace Nano::Memory
             T* obj = new (memory) T(std::forward<TArgs>(args)...);
 
             if constexpr (TrackDestructors && !std::is_trivially_destructible_v<T>)
-            
-            m_Tracked.Objects.emplace_back(obj, [](void* p) { static_cast<T*>(p)->~T(); });
+
+                m_Tracked.Objects.emplace_back(obj, [](void* p) { static_cast<T*>(p)->~T(); });
             return obj;
         }
 
@@ -996,13 +1016,13 @@ namespace Nano::Memory
 
     private:
         // Private methods
-        void AllocateBlock() 
+        void AllocateBlock()
         {
             size_t capacity = Size * (m_Blocks.size() + 1);
             m_Blocks.emplace_back(new std::byte[capacity], 0ull);
         }
 
-        [[nodiscard]] void* Allocate(size_t size, size_t alignment = alignof(std::max_align_t)) 
+        [[nodiscard]] void* Allocate(size_t size, size_t alignment = alignof(std::max_align_t))
         {
             if (m_Blocks.empty() || m_Blocks.back().Used + size + alignment > (m_Blocks.size() * Size))
                 AllocateBlock();
@@ -1048,7 +1068,277 @@ namespace Nano::Memory
     };
 #endif
 
+    ////////////////////////////////////////////////////////////////////////////////////
+    // RefCounted
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename T>
+    class Ref;
+
+    class RefCounted
+    {
+    public:
+        // Constructor & Destructor
+        RefCounted() = default;
+        virtual ~RefCounted() = default;
+
+    protected:
+        // Methods
+        inline void IncRefCount() const { ++m_RefCount; }
+        inline void DecRefCount() const { --m_RefCount; }
+
+        // Getters
+        [[nodiscard]] inline uint32_t GetRefCount() const { return m_RefCount.load(); }
+
+    private:
+        mutable std::atomic<uint32_t> m_RefCount = 0;
+
+        template<typename T>
+        friend class Ref;
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Ref<T>
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename T>
+    class Ref
+    {
+    public:
+        // Constructors & Destructor
+        Ref() requires(std::derived_from<T, RefCounted>) = default;
+        inline Ref(std::nullptr_t n) requires(std::derived_from<T, RefCounted>)
+            : m_Instance(nullptr) {}
+
+        inline Ref(T* instance) requires(std::derived_from<T, RefCounted>)
+            : m_Instance(instance)
+        {
+            IncRef();
+        }
+
+        inline Ref(const Ref<T>& other) requires(std::derived_from<T, RefCounted>)
+            : m_Instance(other.m_Instance)
+        {
+            IncRef();
+        }
+
+        template<typename T2>
+        inline Ref(const Ref<T2>& other) requires(std::derived_from<T, RefCounted>)
+            : m_Instance(reinterpret_cast<T*>(other.m_Instance))
+        {
+            IncRef();
+        }
+
+        template<typename T2>
+        inline Ref(Ref<T2>&& other) requires(std::derived_from<T, RefCounted>)
+            : m_Instance(reinterpret_cast<T*>(other.m_Instance))
+        {
+            other.m_Instance = nullptr;
+        }
+
+        inline ~Ref()
+        {
+            DecRef();
+        }
+
+        // Operators
+        Ref& operator = (std::nullptr_t n)
+        {
+            DecRef();
+            m_Instance = nullptr;
+            return *this;
+        }
+
+        Ref& operator = (const Ref<T>& other)
+        {
+            other.IncRef();
+            DecRef();
+
+            m_Instance = other.m_Instance;
+
+            return *this;
+        }
+
+        template<typename T2>
+        Ref& operator = (const Ref<T2>& other)
+        {
+            other.IncRef();
+            DecRef();
+
+            m_Instance = other.m_Instance;
+
+            return *this;
+        }
+
+        template<typename T2>
+        Ref& operator = (Ref<T2>&& other)
+        {
+            DecRef();
+
+            m_Instance = other.m_Instance;
+
+            other.m_Instance = nullptr;
+
+            return *this;
+        }
+
+        inline bool operator == (const Ref<T>& other) const { return m_Instance == other.m_Instance; }
+        inline bool operator != (const Ref<T>& other) const { return !(*this == other); }
+
+        inline operator bool() { return m_Instance != nullptr; }
+        inline operator bool() const { return m_Instance != nullptr; }
+
+        inline T* operator -> () { return m_Instance; }
+        inline const T* operator -> () const { return m_Instance; }
+
+        inline T& operator * () { return *m_Instance; }
+        inline const T& operator * () const { return *m_Instance; }
+
+        // Getters
+        [[nodiscard]] inline T* Raw() { return m_Instance; }
+        [[nodiscard]] inline const T* Raw() const { return m_Instance; }
+
+        // Methods
+        void Reset(T* instance = nullptr)
+        {
+            DecRef();
+            m_Instance = instance;
+        }
+
+        template<typename T2>
+        [[nodiscard]] inline Ref<T2> As() const
+        {
+            return Ref<T2>(*this);
+        }
+
+        template<typename... TArgs>
+        [[nodiscard]] inline static Ref<T> Create(TArgs&&... args)
+        {
+            return Ref<T>(new T(std::forward<TArgs>(args)...));
+        }
+
+        [[nodiscard]] bool EqualsObject(const Ref<T>& other)
+        {
+            if (!m_Instance || !other.m_Instance)
+                return false;
+
+            return *m_Instance == *other.m_Instance;
+        }
+
+    private:
+        // Private methods
+        void IncRef() const
+        {
+            if (m_Instance)
+            {
+                m_Instance->IncRefCount();
+
+                Internal::Memory::RefUtils::AddToLiveReferences(static_cast<void*>(m_Instance));
+            }
+        }
+
+        void DecRef() const
+        {
+            if (m_Instance)
+            {
+                m_Instance->DecRefCount();
+                if (m_Instance->GetRefCount() == 0)
+                {
+                    delete m_Instance;
+
+                    Internal::Memory::RefUtils::RemoveFromLiveReferences(static_cast<void*>(m_Instance));
+
+                    m_Instance = nullptr;
+                }
+            }
+        }
+
+    private:
+        mutable T* m_Instance = nullptr;
+
+        template<typename T2>
+        friend class Ref;
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // WeakRef
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename T>
+    class WeakRef
+    {
+    public:
+        // Constructors & Destructor
+        WeakRef() = default;
+        WeakRef(T* ptr) requires(std::derived_from<T, RefCounted>)
+            : m_Instance(ptr) {}
+        WeakRef(Ref<T> ref) requires(std::derived_from<T, RefCounted>)
+            : m_Instance(ref.Raw()) {}
+        ~WeakRef() = default;
+
+        // Operators
+        inline operator bool() { return IsValid(); }
+        inline operator bool() const { return IsValid(); }
+
+        // Methods
+        inline bool IsValid() const { return m_Instance ? Internal::Memory::RefUtils::IsLive(m_Instance) : false; }
+
+        Ref<T> GetRef() const
+        {
+            return Ref<T>(m_Instance);
+        }
+
+        template<typename T2>
+        WeakRef<T2> As() const
+        {
+            return WeakRef<T2>(reinterpret_cast<T2*>(m_Instance));
+        }
+
+    private:
+        T* m_Instance = nullptr;
+    };
+
 }
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+// --- Memory CPP ---
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+#if defined(NANO_IMPL_MEMORY)
+namespace Nano::Internal::Memory
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Ref Objects
+    ////////////////////////////////////////////////////////////////////////////////////
+    namespace
+    {
+        static std::unordered_set<void*> s_LiveReferences = { };
+        static std::shared_mutex s_LiveReferenceMutex = {};
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Ref Utilities
+    ////////////////////////////////////////////////////////////////////////////////////
+    void AddToLiveReferences(void* instance)
+    {
+        std::unique_lock<std::shared_mutex> lock(s_LiveReferenceMutex);
+        s_LiveReferences.insert(instance);
+    }
+
+    void RemoveFromLiveReferences(void* instance)
+    {
+        std::unique_lock<std::shared_mutex> lock(s_LiveReferenceMutex);
+        NANO_ASSERT((s_LiveReferences.find(instance) != s_LiveReferences.end()), "Trying to remove instance which doesn't exists");
+        s_LiveReferences.erase(instance);
+    }
+
+    bool IsLive(void* instance)
+    {
+        std::shared_lock<std::shared_mutex> lock(s_LiveReferenceMutex);
+        return s_LiveReferences.contains(instance);
+    }
+
+}
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
@@ -1339,6 +1629,13 @@ namespace Nano::Enum
         static_assert((Max - Min <= std::numeric_limits<uint16_t>::max()), "[Max - Min] must not exceed uint16 max value.");
     };
 
+    template<typename TEnum> requires(std::is_enum_v<TEnum>)
+    struct Bitwise : public Traits::NoConstruct
+    {
+    public:
+        inline static constexpr bool Enabled = false;
+    };
+
 }
 
 namespace Nano::Internal::Enum
@@ -1613,6 +1910,12 @@ namespace Nano::Internal::Enum
     }
 
     ////////////////////////////////////////////////////////////////////////////////////
+    // Bitwise
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename TEnum>
+    concept BitwiseEnum = std::is_enum_v<TEnum> && Nano::Enum::Bitwise<TEnum>::Enabled;
+
+    ////////////////////////////////////////////////////////////////////////////////////
     // Fusing
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename TEnum> requires(std::is_enum_v<TEnum>)
@@ -1678,6 +1981,52 @@ namespace Nano::Enum
         return static_cast<Fused>(Internal::Enum::Fuse<std::decay_t<TEnums>...>(values...));
     }
 
+}
+
+template<Nano::Internal::Enum::BitwiseEnum TEnum>
+constexpr auto operator & (TEnum lhs, TEnum rhs) noexcept(true)
+{
+    using U = std::underlying_type_t<TEnum>;
+    return static_cast<TEnum>((static_cast<U>(lhs) & static_cast<U>(rhs)));
+}
+
+template<Nano::Internal::Enum::BitwiseEnum TEnum>
+constexpr auto operator | (TEnum lhs, TEnum rhs) noexcept(true)
+{
+    using U = std::underlying_type_t<TEnum>;
+    return static_cast<TEnum>((static_cast<U>(lhs) | static_cast<U>(rhs)));
+}
+
+template<Nano::Internal::Enum::BitwiseEnum TEnum>
+constexpr auto operator ^ (TEnum lhs, TEnum rhs) noexcept(true)
+{
+    using U = std::underlying_type_t<TEnum>;
+    return static_cast<TEnum>((static_cast<U>(lhs) ^ static_cast<U>(rhs)));
+}
+
+template<Nano::Internal::Enum::BitwiseEnum TEnum>
+constexpr TEnum operator ~ (TEnum value) noexcept(true)
+{
+    using U = std::underlying_type_t<TEnum>;
+    return TEnum(~static_cast<U>(value));
+}
+
+template<Nano::Internal::Enum::BitwiseEnum TEnum>
+constexpr TEnum& operator &= (TEnum& lhs, TEnum rhs) noexcept(true)
+{
+    return lhs = (lhs & rhs);
+}
+
+template<Nano::Internal::Enum::BitwiseEnum TEnum>
+constexpr TEnum& operator |= (TEnum& lhs, TEnum rhs) noexcept(true)
+{
+    return lhs = (lhs | rhs);
+}
+
+template<Nano::Internal::Enum::BitwiseEnum TEnum>
+constexpr TEnum& operator ^= (TEnum& lhs, TEnum rhs) noexcept(true)
+{
+    return lhs = (lhs ^ rhs);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -2510,7 +2859,7 @@ namespace Nano::Internal::ECS
     {
     public:
         using TypesTuple = std::tuple<Components...>;
-        using StorageTuple = std::tuple<Memory::SparseSet<Components, ID>...>;
+        using StorageTuple = std::tuple<Nano::Memory::SparseSet<Components, ID>...>;
     public:
         // Constructor & Destructor
         Storage() = default;
@@ -2520,51 +2869,51 @@ namespace Nano::Internal::ECS
         template<typename TComponent>
         void AddComponent(ID id, const TComponent& component) requires(Nano::Types::TupleContains<TComponent, TypesTuple> && std::is_copy_constructible_v<TComponent>)
         {
-            std::get<Memory::SparseSet<TComponent, ID>>(m_Components).Add(id, component);
+            std::get<Nano::Memory::SparseSet<TComponent, ID>>(m_Components).Add(id, component);
         }
 
         template<typename TComponent>
         void AddComponent(ID id, TComponent&& component) requires(Nano::Types::TupleContains<TComponent, TypesTuple>&& std::is_move_constructible_v<TComponent>)
         {
-            std::get<Memory::SparseSet<TComponent, ID>>(m_Components).Add(id, std::move(component));
+            std::get<Nano::Memory::SparseSet<TComponent, ID>>(m_Components).Add(id, std::move(component));
         }
 
         template<typename TComponent, typename ...TArgs>
         void AddComponent(ID id, TArgs&& ...args) requires(Nano::Types::TupleContains<TComponent, TypesTuple>&& std::is_constructible_v<TComponent, TArgs...>)
         {
-            std::get<Memory::SparseSet<TComponent, ID>>(m_Components).Add(id, std::forward<TArgs>(args)...);
+            std::get<Nano::Memory::SparseSet<TComponent, ID>>(m_Components).Add(id, std::forward<TArgs>(args)...);
         }
 
         template<typename TComponent>
         void RemoveComponent(ID id) requires(Nano::Types::TupleContains<TComponent, TypesTuple>)
         {
-            std::get<Memory::SparseSet<TComponent, ID>>(m_Components).Remove(id);
+            std::get<Nano::Memory::SparseSet<TComponent, ID>>(m_Components).Remove(id);
         }
 
         // Getters
         template<typename TComponent>
         [[nodiscard]] bool HasComponent(ID id) const requires(Nano::Types::TupleContains<TComponent, TypesTuple>)
         {
-            return std::get<Memory::SparseSet<TComponent, ID>>(m_Components).Has(id);
+            return std::get<Nano::Memory::SparseSet<TComponent, ID>>(m_Components).Has(id);
         }
 
         template<typename TComponent>
         [[nodiscard]] TComponent& GetComponent(ID id) requires(Nano::Types::TupleContains<TComponent, TypesTuple>)
         {
-            return std::get<Memory::SparseSet<TComponent, ID>>(m_Components).Get(id);
+            return std::get<Nano::Memory::SparseSet<TComponent, ID>>(m_Components).Get(id);
         }
 
         template<typename TComponent>
         [[nodiscard]] const TComponent& GetComponent(ID id) const requires(Nano::Types::TupleContains<TComponent, TypesTuple>)
         {
-            return std::get<Memory::SparseSet<TComponent, ID>>(m_Components).Get(id);
+            return std::get<Nano::Memory::SparseSet<TComponent, ID>>(m_Components).Get(id);
         }
 
         // Internal
         template<typename TComponent>
-        inline Memory::SparseSet<TComponent, ID>& GetSparseSet() requires(Nano::Types::TupleContains<TComponent, TypesTuple>) { return std::get<Memory::SparseSet<TComponent, ID>>(m_Components); }
+        inline Nano::Memory::SparseSet<TComponent, ID>& GetSparseSet() requires(Nano::Types::TupleContains<TComponent, TypesTuple>) { return std::get<Nano::Memory::SparseSet<TComponent, ID>>(m_Components); }
         template<typename TComponent>
-        inline const Memory::SparseSet<TComponent, ID>& GetSparseSet() const requires(Nano::Types::TupleContains<TComponent, TypesTuple>) { return std::get<Memory::SparseSet<TComponent, ID>>(m_Components); }
+        inline const Nano::Memory::SparseSet<TComponent, ID>& GetSparseSet() const requires(Nano::Types::TupleContains<TComponent, TypesTuple>) { return std::get<Nano::Memory::SparseSet<TComponent, ID>>(m_Components); }
 
     private:
         StorageTuple m_Components;
@@ -2577,7 +2926,7 @@ namespace Nano::Internal::ECS
     class ComponentView final : public Nano::Traits::NoCopy
     {
     public:
-        using SparseSetsTuple = std::tuple<std::add_lvalue_reference_t<Memory::SparseSet<Components, ID>>...>;
+        using SparseSetsTuple = std::tuple<std::add_lvalue_reference_t<Nano::Memory::SparseSet<Components, ID>>...>;
     public:
         ////////////////////////////////////////////////////////////////////////////////////
         // TypeIterator
@@ -2604,7 +2953,7 @@ namespace Nano::Internal::ECS
                     {
                         ID id = *m_Current;
 
-                        if ((std::get<Memory::SparseSet<Components, ID>&>(m_Sets).Has(id) && ...))
+                        if ((std::get<Nano::Memory::SparseSet<Components, ID>&>(m_Sets).Has(id) && ...))
                             break;
 
                         ++m_Current;
@@ -2619,7 +2968,7 @@ namespace Nano::Internal::ECS
             auto operator * () const 
             { 
                 ID id = *m_Current;
-                return std::tuple<ID, std::add_lvalue_reference_t<Components>...>{ id, std::get<Memory::SparseSet<Components, ID>&>(m_Sets).Get(id)... };
+                return std::tuple<ID, std::add_lvalue_reference_t<Components>...>{ id, std::get<Nano::Memory::SparseSet<Components, ID>&>(m_Sets).Get(id)... };
             }
             TypeIterator& operator ++ ()
             {
@@ -2640,7 +2989,7 @@ namespace Nano::Internal::ECS
         struct IndexIterator
         {
         public:
-            using PtrTuple = std::tuple<std::add_pointer_t<Memory::SparseSet<Components, ID>>...>;
+            using PtrTuple = std::tuple<std::add_pointer_t<Nano::Memory::SparseSet<Components, ID>>...>;
         public:
             // Constructor & Destructor
             IndexIterator(const ID* beginID, const ID* endID, const SparseSetsTuple& sets)
