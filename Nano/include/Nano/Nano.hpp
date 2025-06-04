@@ -3614,7 +3614,7 @@ namespace Nano::Internal
         }
         // Output
         {
-            uint64_t median = times[static_cast<size_t>(std::ceilf(static_cast<float>(times.size()) / 2.0f))];
+            uint64_t median = times[static_cast<size_t>(std::floorf(static_cast<float>(times.size()) / 2.0f))];
             uint64_t mean = std::accumulate(times.begin(), times.end(), 0ull) / times.size();
             uint64_t iterations = times.size();
 
