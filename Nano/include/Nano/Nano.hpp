@@ -2029,6 +2029,46 @@ constexpr TEnum& operator ^= (TEnum& lhs, TEnum rhs) noexcept(true)
     return lhs = (lhs ^ rhs);
 }
 
+#define NANO_DEFINE_BITWISE(TEnum)                                                  \
+    constexpr auto operator & (TEnum lhs, TEnum rhs) noexcept(true)                 \
+    {                                                                               \
+        using U = std::underlying_type_t<TEnum>;                                    \
+        return static_cast<TEnum>((static_cast<U>(lhs) & static_cast<U>(rhs)));     \
+    }                                                                               \
+                                                                                    \
+    constexpr auto operator | (TEnum lhs, TEnum rhs) noexcept(true)                 \
+    {                                                                               \
+        using U = std::underlying_type_t<TEnum>;                                    \
+        return static_cast<TEnum>((static_cast<U>(lhs) | static_cast<U>(rhs)));     \
+    }                                                                               \
+                                                                                    \
+    constexpr auto operator ^ (TEnum lhs, TEnum rhs) noexcept(true)                 \
+    {                                                                               \
+        using U = std::underlying_type_t<TEnum>;                                    \
+        return static_cast<TEnum>((static_cast<U>(lhs) ^ static_cast<U>(rhs)));     \
+    }                                                                               \
+                                                                                    \
+    constexpr TEnum operator ~ (TEnum value) noexcept(true)                         \
+    {                                                                               \
+        using U = std::underlying_type_t<TEnum>;                                    \
+        return TEnum(~static_cast<U>(value));                                       \
+    }                                                                               \
+                                                                                    \
+    constexpr TEnum& operator &= (TEnum& lhs, TEnum rhs) noexcept(true)             \
+    {                                                                               \
+        return lhs = (lhs & rhs);                                                   \
+    }                                                                               \
+                                                                                    \
+    constexpr TEnum& operator |= (TEnum& lhs, TEnum rhs) noexcept(true)             \
+    {                                                                               \
+        return lhs = (lhs | rhs);                                                   \
+    }                                                                               \
+                                                                                    \
+    constexpr TEnum& operator ^= (TEnum& lhs, TEnum rhs) noexcept(true)             \
+    {                                                                               \
+        return lhs = (lhs ^ rhs);                                                   \
+    }
+
 ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
 // --- Scope HPP ---
