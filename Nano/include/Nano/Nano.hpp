@@ -619,6 +619,21 @@ namespace Nano::Internal::Memory
 
     }
 
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Tracking type erased objects
+    ////////////////////////////////////////////////////////////////////////////////////
+    struct Tracked
+    {
+    public:
+        using DestructorFn = void (*)(void* object);
+    public:
+        void* Object;
+        DestructorFn Destructor;
+    };
+
+    template<bool Track> struct TrackedObjects  { std::vector<Tracked> Objects = { }; };
+    template<> struct TrackedObjects<false>     { };
+
 }
 
 namespace Nano::Memory
@@ -864,19 +879,6 @@ namespace Nano::Memory
     class FixedStack final // Note: The stack is current on the stack, maybe should be on the heap.
     {
     public:
-        struct Tracked
-        {
-        public:
-            using DestructorFn = void (*)(void* object);
-        public:
-            void* Object;
-            DestructorFn Destructor;
-        };
-
-        template<bool Track> struct TrackedObjects { std::vector<Tracked> Objects = { }; };
-        template<> struct TrackedObjects<false> {};
-
-    public:
         // Constructor & Destructor
         FixedStack()
             : m_Stack(new std::byte[Size]) {
@@ -909,10 +911,10 @@ namespace Nano::Memory
         void Destroy(T* object) requires(TrackDestructors)
         {
             size_t fullSize = sizeof(T) + GetPadding(reinterpret_cast<size_t>(object), alignof(T));
-            NANO_ASSERT((static_cast<void*>(m_Stack - fullSize) == (m_Used - fullSize)), "Trying to destroy an object not on the back of the stack.");
+            NANO_ASSERT((reinterpret_cast<uint64_t>(static_cast<void*>(m_Stack - fullSize)) == (m_Used - fullSize)), "Trying to destroy an object not on the back of the stack.");
 
             auto& back = m_Tracked.Objects.back();
-            NANO_ASSERT((static_cast<void*>(m_Stack - fullSize) == back.Object), "Trying to destroy an object not on the back of the stack.");
+            NANO_ASSERT((reinterpret_cast<uint64_t>(static_cast<void*>(m_Stack - fullSize)) == back.Object), "Trying to destroy an object not on the back of the stack.");
 
             back.Destuctor(back.Object);
             m_Tracked.Objects.pop_back();
@@ -951,7 +953,7 @@ namespace Nano::Memory
         size_t m_Used = 0;
 
         [[no_unique_address]]
-        TrackedObjects<TrackDestructors> m_Tracked = {};
+        Internal::Memory::TrackedObjects<TrackDestructors> m_Tracked = {};
     };
 
     ////////////////////////////////////////////////////////////////////////////////////
@@ -961,18 +963,6 @@ namespace Nano::Memory
     class ArenaAllocator final // Note: Allocates in blocks
     {
     private:
-        struct Tracked
-        {
-        public:
-            using DestructorFn = void (*)(void* object);
-        public:
-            void* Object;
-            DestructorFn Destructor;
-        };
-
-        template<bool Track> struct TrackedObjects { std::vector<Tracked> Objects = { }; };
-        template<> struct TrackedObjects<false> {};
-
         struct Block // Note: The capacity is the index + 1 times the templated Size
         {
         public:
@@ -1064,7 +1054,7 @@ namespace Nano::Memory
         std::vector<Block> m_Blocks = { };
 
         [[no_unique_address]]
-        TrackedObjects<TrackDestructors> m_Tracked = {};
+        Internal::Memory::TrackedObjects<TrackDestructors> m_Tracked = {};
     };
 #endif
 
@@ -1500,7 +1490,7 @@ namespace Nano::Internal::Types
     struct TupleContains<T, std::tuple<Types...>> : std::bool_constant<(std::is_same_v<T, Types> || ...)> {};
 
     template<typename Tuple, typename TFunc, std::size_t... I>
-    [[nodiscard]] void ForEachTypeInTuple(TFunc&& func, std::index_sequence<I...>)
+    void ForEachTypeInTuple(TFunc&& func, std::index_sequence<I...>)
     {
         (func.template operator()<std::tuple_element_t<I, Tuple>>(), ...);
     }
