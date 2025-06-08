@@ -144,7 +144,6 @@
 
 // Debug
 #if defined(NANO_DEBUG)
-    #define NANO_DEBUG_DEFERREDCONSTRUCT
     #define NANO_DEBUG_EXPECTED
 
     #if !defined(NANO_ASSERT)
@@ -663,74 +662,52 @@ namespace Nano::Memory
                 {
                     if (!std::ranges::all_of(m_Storage, [](std::byte b) { return b == std::byte{ 0 }; }))
                     {
-                        CheckConstructed();
                         reinterpret_cast<T*>(m_Storage)->~T();
                     }
                 }
                 else
             #endif
                 {
-                    CheckConstructed();
                     reinterpret_cast<T*>(m_Storage)->~T();
                 }
             }
         }
 
         // Operators
-        inline operator T& ()               noexcept(true) { CheckConstructed(); return *reinterpret_cast<T*>(m_Storage); }
-        inline operator const T& () const   noexcept(true) { CheckConstructed(); return *reinterpret_cast<const T*>(m_Storage); }
-        inline operator T* ()               noexcept(true) { CheckConstructed(); return reinterpret_cast<T*>(m_Storage); }
-        inline operator const T* () const   noexcept(true) { CheckConstructed(); return reinterpret_cast<const T*>(m_Storage); }
+        inline operator T& ()               noexcept(true) { return *reinterpret_cast<T*>(m_Storage); }
+        inline operator const T& () const   noexcept(true) { return *reinterpret_cast<const T*>(m_Storage); }
+        inline operator T* ()               noexcept(true) { return reinterpret_cast<T*>(m_Storage); }
+        inline operator const T* () const   noexcept(true) { return reinterpret_cast<const T*>(m_Storage); }
 
-        inline T* operator -> () { CheckConstructed(); return reinterpret_cast<T*>(m_Storage); }
-        inline const T* operator -> () const { CheckConstructed(); return reinterpret_cast<const T*>(m_Storage); }
+        inline T* operator -> () { return reinterpret_cast<T*>(m_Storage); }
+        inline const T* operator -> () const { return reinterpret_cast<const T*>(m_Storage); }
 
         // Getters
-        [[nodiscard]] inline T& Get()               noexcept(true) { CheckConstructed(); return *reinterpret_cast<T*>(m_Storage); }
-        [[nodiscard]] inline const T& Get() const   noexcept(true) { CheckConstructed(); return *reinterpret_cast<const T*>(m_Storage); }
+        [[nodiscard]] inline T& Get()               noexcept(true) { return *reinterpret_cast<T*>(m_Storage); }
+        [[nodiscard]] inline const T& Get() const   noexcept(true) { return *reinterpret_cast<const T*>(m_Storage); }
 
         // Methods
         template<typename ...Args>
         inline void Construct(Args&& ...args) noexcept(std::is_nothrow_constructible_v<T, Args...>)
         {
-        #if defined(NANO_DEBUG_DEFERREDCONSTRUCT)
-            if (m_Constructed) [[unlikely]]
-            {
-                NANO_ASSERT(false, "Object already constructed."); // Object already constructed, calling destructor on previous object! Please change your implementation to avoid re-constructing, since these checks are only available in Debug mode.
-                if constexpr (!std::is_trivially_destructible_v<T>)
-                    reinterpret_cast<T*>(m_Storage)->~T();
-            }
-
-            m_Constructed = true;
-        #endif
-
             new (m_Storage) T(std::forward<Args>(args)...);
         }
 
     #if defined(NANO_EXPERIMENTAL)
         inline void Destroy() noexcept(std::is_nothrow_destructible_v<T>) requires(Destroyable)
         {
-            CheckConstructed();
-
             if constexpr (!std::is_trivially_destructible_v<T>)
                 reinterpret_cast<T*>(m_Storage)->~T();
 
             std::memset(m_Storage, 0, sizeof(m_Storage));
+        }
 
-        #if defined(NANO_DEBUG_DEFERREDCONSTRUCT)
-            m_Constructed = false;
-        #endif
+        // Getter
+        inline void IsConstructed() noexcept(true) requires(Destroyable)
+        {
+            return std::ranges::all_of(m_Storage, [](std::byte b) { return b == std::byte{ 0 }; });
         }
     #endif
-
-    private:
-        // Debug method
-        inline void CheckConstructed() const noexcept(true)
-        {
-            #if defined(NANO_DEBUG_DEFERREDCONSTRUCT)
-                NANO_ASSERT(m_Constructed, "Object not constructed yet."); // Object not constructed yet.
-            #endif
-        }
 
     private:
         // std::aligned_storage is deprecated as of C++23
@@ -746,10 +723,6 @@ namespace Nano::Memory
             #pragma warning(pop)
         #else
                 alignas(T) std::byte m_Storage[sizeof(T)] = {};
-        #endif
-
-        #if defined(NANO_DEBUG_DEFERREDCONSTRUCT)
-                bool m_Constructed = false;
         #endif
     };
 
