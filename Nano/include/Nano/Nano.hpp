@@ -705,7 +705,7 @@ namespace Nano::Memory
         // Getter
         [[nodiscard]] inline bool IsConstructed() noexcept(true) requires(Destroyable)
         {
-            return std::ranges::all_of(m_Storage, [](std::byte b) { return b == std::byte{ 0 }; });
+            return !(std::ranges::all_of(m_Storage, [](std::byte b) { return b == std::byte{ 0 }; }));
         }
     #endif
 
