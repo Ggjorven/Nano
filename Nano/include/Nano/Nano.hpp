@@ -1258,6 +1258,21 @@ namespace Nano::Memory
         T* m_Instance = nullptr;
     };
 
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Helper methods
+    ////////////////////////////////////////////////////////////////////////////////////
+    [[nodiscard]] inline constexpr size_t AlignOffset(size_t offset, size_t alignment = 4) // Note: Requires alignment to be a power of 2
+    {
+        return (offset + (alignment - 1)) & ~(alignment - 1);
+        //return ((offset + (alignment - 1)) / alignment) * alignment;
+    }
+
+    template<typename T>
+    [[nodiscard]] inline constexpr T* AlignPointer(T* ptr, size_t alignment = alignof(T)) // Note: Requires alignment to be a power of 2
+    {
+        return reinterpret_cast<T*>((reinterpret_cast<uintptr_t>(ptr) + (alignment - 1)) & ~(alignment - 1));
+    }
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
