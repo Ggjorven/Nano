@@ -149,10 +149,14 @@
     #if !defined(NANO_ASSERT)
         #define NANO_ASSERT(x, msg) do { if (!(x)) { std::cerr << "Nano: Assert failed" << msg << std::endl; NANO_DEBUG_BREAK(); } } while (false)
     #endif
+
+    #define NANO_DEBUG_CONSTEXPR 
 #else
     #if !defined(NANO_ASSERT)
         #define NANO_ASSERT(x, msg)
     #endif
+
+    #define NANO_DEBUG_CONSTEXPR constexpr
 #endif
 
 // Implementations
@@ -1259,16 +1263,145 @@ namespace Nano::Memory
     };
 
     ////////////////////////////////////////////////////////////////////////////////////
+    // StaticVector<T, N> // TODO: Add more functions
+    ////////////////////////////////////////////////////////////////////////////////////
+    template<typename T, size_t MaxElements>
+    class StaticVector : private std::array<T, MaxElements>
+    {
+    public:
+        using Base = std::array<T, MaxElements>;
+    public:
+        using typename Base::value_type;
+        using typename Base::size_type;
+        using typename Base::difference_type;
+        using typename Base::reference;
+        using typename Base::const_reference;
+        using typename Base::pointer;
+        using typename Base::const_pointer;
+        using typename Base::iterator;
+        using typename Base::const_iterator;
+    public:
+        // Constructors & Destructor
+        inline constexpr StaticVector()
+            : Base(), m_Size(0) {}
+        inline NANO_DEBUG_CONSTEXPR StaticVector(size_t size)
+            : Base(), m_Size(size)
+        {
+            NANO_ASSERT((size <= MaxElements), "[StaticVector] Size exceeds max elements.");
+        }
+        inline NANO_DEBUG_CONSTEXPR StaticVector(std::initializer_list<T> list)
+            : m_Size(0)
+        {
+            for (auto i : list)
+                push_back(i);
+        }
+
+        // Operators
+        using Base::at;
+        [[nodiscard]] inline NANO_DEBUG_CONSTEXPR reference operator [] (size_type pos)
+        {
+            NANO_ASSERT((pos < m_Size), "[StaticVector] Size exceeds max elements.");
+            return Base::operator[](pos);
+        }
+
+        [[nodiscard]] inline NANO_DEBUG_CONSTEXPR const_reference operator[] (size_type pos) const
+        {
+            NANO_ASSERT((pos < m_Size), "[StaticVector] Size exceeds max elements.");
+            return Base::operator[](pos);
+        }
+
+        // Methods
+        using Base::front;
+        [[nodiscard]] inline constexpr reference back() noexcept { auto tmp = end(); --tmp; return *tmp; }
+        [[nodiscard]] inline constexpr const_reference back() const noexcept { auto tmp = cend(); --tmp; return *tmp; }
+
+        // Iterators
+        using Base::data;
+        using Base::begin;
+        using Base::cbegin;
+        inline constexpr iterator end() noexcept { return iterator(begin()) + m_Size; }
+        inline constexpr const_iterator end() const noexcept { return cend(); }
+        inline constexpr const_iterator cend() const noexcept { return const_iterator(cbegin()) + m_Size; }
+
+        // Helper methods
+        [[nodiscard]] inline constexpr bool empty() const noexcept { return m_Size == 0; }
+        [[nodiscard]] inline constexpr size_t size() const noexcept { return m_Size; }
+        [[nodiscard]] inline constexpr size_t max_size() const noexcept { return MaxElements; }
+
+        // Filling methods
+        inline constexpr void fill(const T& value) noexcept
+        {
+            Base::fill(value);
+            m_Size = MaxElements;
+        }
+
+        inline constexpr void swap(StaticVector& other) noexcept
+        {
+            Base::swap(*this);
+            std::swap(m_Size, other.m_Size);
+        }
+
+        inline NANO_DEBUG_CONSTEXPR void push_back(const T& value) noexcept
+        {
+            NANO_ASSERT((m_Size < MaxElements), "[StaticVector] Size exceeds max elements.");
+            *(data() + m_Size) = value;
+            m_Size++;
+        }
+
+        inline NANO_DEBUG_CONSTEXPR void push_back(T&& value) noexcept
+        {
+            NANO_ASSERT((m_Size < MaxElements), "[StaticVector] Size exceeds max elements.");
+            *(data() + m_Size) = std::move(value);
+            m_Size++;
+        }
+
+        inline NANO_DEBUG_CONSTEXPR void pop_back() noexcept
+        {
+            NANO_ASSERT((m_Size > 0), "[StaticVector] Vector is empty.");
+            m_Size--;
+        }
+
+        inline NANO_DEBUG_CONSTEXPR void resize(size_type newSize) noexcept
+        {
+            NANO_ASSERT((newSize <= MaxElements), "[StaticVector] Size exceeds max elements.");
+
+            if (m_Size > newSize)
+            {
+                for (size_type i = newSize; i < m_Size; i++)
+                    *(data() + i) = T{};
+            }
+            else
+            {
+                for (size_type i = m_Size; i < newSize; i++)
+                    *(data() + i) = T{};
+            }
+
+            m_Size = newSize;
+        }
+
+        [[nodiscard]] inline constexpr reference emplace_back() noexcept
+        {
+            resize(m_Size + 1);
+            return back();
+        }
+
+        // TODO: Emplace back with args
+
+    private:
+        size_type m_Size = 0;
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////
     // Helper methods
     ////////////////////////////////////////////////////////////////////////////////////
-    [[nodiscard]] inline constexpr size_t AlignOffset(size_t offset, size_t alignment = 4) // Note: Requires alignment to be a power of 2
+    [[nodiscard]] inline NANO_DEBUG_CONSTEXPR size_t AlignOffset(size_t offset, size_t alignment = 4) // Note: Requires alignment to be a power of 2
     {
+        NANO_ASSERT((alignment % 2 == 0), "Alignment must be a power of two");
         return (offset + (alignment - 1)) & ~(alignment - 1);
-        //return ((offset + (alignment - 1)) / alignment) * alignment;
     }
 
     template<typename T>
-    [[nodiscard]] inline constexpr T* AlignPointer(T* ptr, size_t alignment = alignof(T)) // Note: Requires alignment to be a power of 2
+    [[nodiscard]] inline NANO_DEBUG_CONSTEXPR T* AlignPointer(T* ptr, size_t alignment = alignof(T)) // Note: Requires alignment to be a power of 2
     {
         return reinterpret_cast<T*>((reinterpret_cast<uintptr_t>(ptr) + (alignment - 1)) & ~(alignment - 1));
     }
@@ -2468,7 +2601,7 @@ namespace Nano::Maths
     // Utility
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename T>
-    [[nodiscard]] constexpr uint8_t CountNumbers(T value) noexcept(true) requires(std::is_arithmetic_v<T>)
+    [[nodiscard]] NANO_DEBUG_CONSTEXPR uint8_t CountNumbers(T value) noexcept(true) requires(std::is_arithmetic_v<T>)
     {
         std::array<char, 64> buffer = { };
         auto [ptr, ec] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
@@ -2553,23 +2686,23 @@ namespace Nano::Errors
         }
         
         // Operators
-        inline constexpr operator T& ()                 noexcept(true)  { CheckConstructed(); return m_Value; }
-        inline constexpr operator const T& ()   const   noexcept(true)  { CheckConstructed(); return m_Value; }
-        inline constexpr operator T* ()                 noexcept(true)  { CheckConstructed(); return m_Value; }
-        inline constexpr operator const T* ()   const   noexcept(true)  { CheckConstructed(); return m_Value; }
+        inline NANO_DEBUG_CONSTEXPR operator T& ()                 noexcept(true)  { CheckConstructed(); return m_Value; }
+        inline NANO_DEBUG_CONSTEXPR operator const T& ()   const   noexcept(true)  { CheckConstructed(); return m_Value; }
+        inline NANO_DEBUG_CONSTEXPR operator T* ()                 noexcept(true)  { CheckConstructed(); return m_Value; }
+        inline NANO_DEBUG_CONSTEXPR operator const T* ()   const   noexcept(true)  { CheckConstructed(); return m_Value; }
 
-        inline constexpr T* operator -> ()              noexcept(true)  { CheckConstructed(); return m_Value; }
-        inline constexpr const T* operator -> () const                  { CheckConstructed(); return m_Value; }
+        inline NANO_DEBUG_CONSTEXPR T* operator -> ()              noexcept(true)  { CheckConstructed(); return m_Value; }
+        inline NANO_DEBUG_CONSTEXPR const T* operator -> () const                  { CheckConstructed(); return m_Value; }
 
         inline constexpr explicit operator bool() const noexcept(true) { return m_HasValue; }
         
         // Value
-        [[nodiscard]] inline constexpr T& Get()               noexcept(true) { CheckConstructed(); return m_Value; }
-        [[nodiscard]] inline constexpr const T& Get() const   noexcept(true) { CheckConstructed(); return m_Value; }
+        [[nodiscard]] inline NANO_DEBUG_CONSTEXPR T& Get()               noexcept(true) { CheckConstructed(); return m_Value; }
+        [[nodiscard]] inline NANO_DEBUG_CONSTEXPR const T& Get() const   noexcept(true) { CheckConstructed(); return m_Value; }
 
         // Error
-        [[nodiscard]] inline constexpr E& Error()             noexcept(true)  { ErrorPresent(); return m_Value; }
-        [[nodiscard]] inline constexpr const E& Error() const noexcept(true)  { ErrorPresent(); return m_Value; }
+        [[nodiscard]] inline NANO_DEBUG_CONSTEXPR E& Error()             noexcept(true)  { ErrorPresent(); return m_Value; }
+        [[nodiscard]] inline NANO_DEBUG_CONSTEXPR const E& Error() const noexcept(true)  { ErrorPresent(); return m_Value; }
 
         // Getters
         [[nodiscard]] inline constexpr bool HasValue() const noexcept(true) { return m_HasValue; }
@@ -2620,14 +2753,14 @@ namespace Nano::Errors
 
     private:
         // Debug method
-        inline constexpr void CheckConstructed() const noexcept(true)
+        inline NANO_DEBUG_CONSTEXPR void CheckConstructed() const noexcept(true)
         {
             #if defined(NANO_DEBUG_EXPECTED)
             NANO_ASSERT(m_HasValue, "Object not constructed yet.");
             #endif
         }
 
-        inline constexpr void ErrorPresent() const noexcept(true)
+        inline NANO_DEBUG_CONSTEXPR void ErrorPresent() const noexcept(true)
         {
             #if defined(NANO_DEBUG_EXPECTED)
             NANO_ASSERT(!m_HasValue, "No error present.");
