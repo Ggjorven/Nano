@@ -2606,10 +2606,7 @@ namespace Nano::Maths
         std::array<char, 64> buffer = { };
         auto [ptr, ec] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
 
-        if (!std::is_constant_evaluated())
-        {
-            NANO_ASSERT(ec == std::errc(), "Failed to convert number to string.");
-        }
+        NANO_ASSERT(ec == std::errc(), "Failed to convert number to string.");
 
         std::string_view view(buffer.data(), ptr - buffer.data());
 
