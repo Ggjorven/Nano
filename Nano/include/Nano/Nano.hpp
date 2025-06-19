@@ -666,29 +666,29 @@ namespace Nano::Memory
                 {
                     if (!std::ranges::all_of(m_Storage, [](std::byte b) { return b == std::byte{ 0 }; }))
                     {
-                        reinterpret_cast<T*>(m_Storage)->~T();
+                        std::launder(reinterpret_cast<T*>(m_Storage))->~T();
                     }
                 }
                 else
             #endif
                 {
-                    reinterpret_cast<T*>(m_Storage)->~T();
+                    std::launder(reinterpret_cast<T*>(m_Storage))->~T();
                 }
             }
         }
 
         // Operators
-        inline operator T& ()               noexcept(true) { return *reinterpret_cast<T*>(m_Storage); }
-        inline operator const T& () const   noexcept(true) { return *reinterpret_cast<const T*>(m_Storage); }
-        inline operator T* ()               noexcept(true) { return reinterpret_cast<T*>(m_Storage); }
-        inline operator const T* () const   noexcept(true) { return reinterpret_cast<const T*>(m_Storage); }
+        inline operator T& ()               noexcept(true) { return Get(); }
+        inline operator const T& () const   noexcept(true) { return Get(); }
+        inline operator T* ()               noexcept(true) { return Get(); }
+        inline operator const T* () const   noexcept(true) { return Get(); }
 
-        inline T* operator -> () { return reinterpret_cast<T*>(m_Storage); }
-        inline const T* operator -> () const { return reinterpret_cast<const T*>(m_Storage); }
+        inline T* operator -> () { return std::launder(reinterpret_cast<T*>(m_Storage)); }
+        inline const T* operator -> () const { return std::launder(reinterpret_cast<const T*>(m_Storage)); }
 
         // Getters
-        [[nodiscard]] inline T& Get()               noexcept(true) { return *reinterpret_cast<T*>(m_Storage); }
-        [[nodiscard]] inline const T& Get() const   noexcept(true) { return *reinterpret_cast<const T*>(m_Storage); }
+        [[nodiscard]] inline T& Get()               noexcept(true) { return *std::launder(reinterpret_cast<T*>(m_Storage)); }
+        [[nodiscard]] inline const T& Get() const   noexcept(true) { return *std::launder(reinterpret_cast<const T*>(m_Storage)); }
 
         // Methods
         template<typename ...Args>
@@ -701,7 +701,7 @@ namespace Nano::Memory
         inline void Destroy() noexcept(std::is_nothrow_destructible_v<T>) requires(Destroyable)
         {
             if constexpr (!std::is_trivially_destructible_v<T>)
-                reinterpret_cast<T*>(m_Storage)->~T();
+                std::launder(reinterpret_cast<T*>(m_Storage))->~T();
 
             std::memset(m_Storage, 0, sizeof(m_Storage));
         }
@@ -1089,14 +1089,14 @@ namespace Nano::Memory
 
         template<typename T2>
         inline Ref(const Ref<T2>& other) requires(std::derived_from<T, RefCounted>)
-            : m_Instance(reinterpret_cast<T*>(other.m_Instance))
+            : m_Instance(std::launder(reinterpret_cast<T*>(other.m_Instance)))
         {
             IncRef();
         }
 
         template<typename T2>
         inline Ref(Ref<T2>&& other) requires(std::derived_from<T, RefCounted>)
-            : m_Instance(reinterpret_cast<T*>(other.m_Instance))
+            : m_Instance(std::launder(reinterpret_cast<T*>(other.m_Instance)))
         {
             other.m_Instance = nullptr;
         }
@@ -1255,7 +1255,7 @@ namespace Nano::Memory
         template<typename T2>
         WeakRef<T2> As() const
         {
-            return WeakRef<T2>(reinterpret_cast<T2*>(m_Instance));
+            return WeakRef<T2>(std::launder(reinterpret_cast<T2*>(m_Instance)));
         }
 
     private:
@@ -1403,7 +1403,7 @@ namespace Nano::Memory
     template<typename T>
     [[nodiscard]] inline NANO_DEBUG_CONSTEXPR T* AlignPointer(T* ptr, size_t alignment = alignof(T)) // Note: Requires alignment to be a power of 2
     {
-        return reinterpret_cast<T*>((reinterpret_cast<uintptr_t>(ptr) + (alignment - 1)) & ~(alignment - 1));
+        return std::launder(reinterpret_cast<T*>((reinterpret_cast<uintptr_t>(ptr) + (alignment - 1)) & ~(alignment - 1)));
     }
 
 }
