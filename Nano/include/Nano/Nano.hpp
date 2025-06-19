@@ -650,7 +650,7 @@ namespace Nano::Memory
         , bool Destroyable = false
 #endif
     >
-    class DeferredConstruct final : public Traits::NoCopy, public Traits::NoMove
+    class DeferredConstruct final //: public Traits::NoCopy, public Traits::NoMove
     {
     public:
         using ValueType = T;
