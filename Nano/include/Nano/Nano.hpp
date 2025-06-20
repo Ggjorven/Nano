@@ -667,13 +667,13 @@ namespace Nano::Memory
                 {
                     if (!std::ranges::all_of(m_Storage, [](std::byte b) { return b == std::byte{ 0 }; }))
                     {
-                        std::launder(reinterpret_cast<T*>(m_Storage))->~T();
+                        std::assume_aligned<alignof(T)>(std::launder(reinterpret_cast<T*>(m_Storage)))->~T();
                     }
                 }
                 else
             #endif
                 {
-                    std::launder(reinterpret_cast<T*>(m_Storage))->~T();
+                    std::assume_aligned<alignof(T)>(std::launder(reinterpret_cast<T*>(m_Storage)))->~T();
                 }
             }
         }
@@ -681,15 +681,15 @@ namespace Nano::Memory
         // Operators
         inline operator T& ()               noexcept(true) { return Get(); }
         inline operator const T& () const   noexcept(true) { return Get(); }
-        inline operator T* ()               noexcept(true) { return std::launder(reinterpret_cast<T*>(m_Storage)); }
-        inline operator const T* () const   noexcept(true) { return std::launder(reinterpret_cast<const T*>(m_Storage)); }
+        inline operator T* ()               noexcept(true) { return std::assume_aligned<alignof(T)>(std::launder(reinterpret_cast<T*>(m_Storage))); }
+        inline operator const T* () const   noexcept(true) { return std::assume_aligned<alignof(T)>(std::launder(reinterpret_cast<const T*>(m_Storage))); }
 
-        inline T* operator -> () { return std::launder(reinterpret_cast<T*>(m_Storage)); }
-        inline const T* operator -> () const { return std::launder(reinterpret_cast<const T*>(m_Storage)); }
+        inline T* operator -> () { return std::assume_aligned<alignof(T)>(std::launder(reinterpret_cast<T*>(m_Storage))); }
+        inline const T* operator -> () const { return std::assume_aligned<alignof(T)>(std::launder(reinterpret_cast<const T*>(m_Storage))); }
 
         // Getters
-        [[nodiscard]] inline T& Get()               noexcept(true) { return *std::launder(reinterpret_cast<T*>(m_Storage)); }
-        [[nodiscard]] inline const T& Get() const   noexcept(true) { return *std::launder(reinterpret_cast<const T*>(m_Storage)); }
+        [[nodiscard]] inline T& Get()               noexcept(true) { return *std::assume_aligned<alignof(T)>(std::launder(reinterpret_cast<T*>(m_Storage))); }
+        [[nodiscard]] inline const T& Get() const   noexcept(true) { return *std::assume_aligned<alignof(T)>(std::launder(reinterpret_cast<const T*>(m_Storage))); }
 
         // Methods
         template<typename ...Args>
@@ -702,7 +702,7 @@ namespace Nano::Memory
         inline void Destroy() noexcept(std::is_nothrow_destructible_v<T>) requires(Destroyable)
         {
             if constexpr (!std::is_trivially_destructible_v<T>)
-                std::launder(reinterpret_cast<T*>(m_Storage))->~T();
+                std::assume_aligned<alignof(T)>(std::launder(reinterpret_cast<T*>(m_Storage)))->~T();
 
             std::memset(m_Storage, 0, sizeof(m_Storage));
         }
