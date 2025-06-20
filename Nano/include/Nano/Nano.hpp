@@ -691,8 +691,8 @@ namespace Nano::Memory
         [[nodiscard]] inline T& Get()               noexcept(true) { return *std::assume_aligned<alignof(T)>(std::launder(reinterpret_cast<T*>(m_Storage))); }
         [[nodiscard]] inline const T& Get() const   noexcept(true) { return *std::assume_aligned<alignof(T)>(std::launder(reinterpret_cast<const T*>(m_Storage))); }
         
-        [[nodiscard]] inline std::byte* GetInternalBytes() noexcept(true) { return &m_Storage; }
-        [[nodiscard]] inline const std::byte* GetInternalBytes() const noexcept(true) { return &m_Storage; }
+        [[nodiscard]] inline std::byte* GetInternalBytes() noexcept(true) { return m_Storage; }
+        [[nodiscard]] inline const std::byte* GetInternalBytes() const noexcept(true) { return m_Storage; }
 
         // Methods
         template<typename ...Args>
