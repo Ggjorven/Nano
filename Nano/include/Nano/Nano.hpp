@@ -8,6 +8,7 @@
 #include <exception>
 
 #include <any>
+#include <new>
 #include <queue>
 #include <mutex>
 #include <chrono>
@@ -680,8 +681,8 @@ namespace Nano::Memory
         // Operators
         inline operator T& ()               noexcept(true) { return Get(); }
         inline operator const T& () const   noexcept(true) { return Get(); }
-        inline operator T* ()               noexcept(true) { return Get(); }
-        inline operator const T* () const   noexcept(true) { return Get(); }
+        inline operator T* ()               noexcept(true) { return std::launder(reinterpret_cast<T*>(m_Storage)); }
+        inline operator const T* () const   noexcept(true) { return std::launder(reinterpret_cast<const T*>(m_Storage)); }
 
         inline T* operator -> () { return std::launder(reinterpret_cast<T*>(m_Storage)); }
         inline const T* operator -> () const { return std::launder(reinterpret_cast<const T*>(m_Storage)); }
