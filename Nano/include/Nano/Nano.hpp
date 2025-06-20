@@ -14,6 +14,7 @@
 #include <chrono>
 #include <future>
 #include <thread>
+#include <memory>
 #include <random>
 #include <ranges>
 #include <variant>
@@ -2847,7 +2848,11 @@ namespace Nano::Threading // TODO: Add concurrency in the future
             std::packaged_task<std::invoke_result_t<TFunc, Args...>()> task(std::forward<TFunc>(func), std::forward<Args>(args)...);
             auto future = task.get_future();
 
+#if defined(NANO_PLATFORM_APPLE) // Note: Apple XCode doesn't support std::move_only_function just yet
+            std::function<void()> wrapper = [task = std::move(task)]() mutable { std::move(task)(); };
+#else
             std::move_only_function<void()> wrapper = [task = std::move(task)]() mutable { std::move(task)(); };
+#endif
             {
                 std::scoped_lock<std::mutex> lock(m_QueueMutex);
                 m_Tasks.push(std::move(wrapper));
@@ -2860,7 +2865,11 @@ namespace Nano::Threading // TODO: Add concurrency in the future
     private:
         std::vector<std::thread> m_Threads;
 
+#if defined(NANO_PLATFORM_APPLE) // Note: Apple XCode doesn't support std::move_only_function just yet
+        std::queue<std::function<void()>> m_Tasks = {};
+#else
         std::queue<std::move_only_function<void()>> m_Tasks = {};
+#endif
 
         std::mutex m_QueueMutex = {};
         std::condition_variable m_TaskAvailable = {};
