@@ -111,7 +111,7 @@
         #define NANO_CPPSTD NANO_CPPSTD_UNKOWN
     #endif
 #else
-    #if __cplusplus == 202602L
+#if __cplusplus >= 202602L
         #define NANO_CPPSTD NANO_CPPSTD_26
     #elif __cplusplus >= 202302L
         #define NANO_CPPSTD NANO_CPPSTD_23
@@ -449,6 +449,28 @@ namespace Nano::Text
     [[nodiscard]] std::string Format(std::format_string<Args...> fmt, Args&& ...args)
     {
         return std::format(fmt, std::forward<Args>(args)...);
+    }
+
+    [[nodiscard]] std::vector<std::string> SplitString(std::string_view str, char delimiter)
+    {
+        std::vector<std::string> result;
+
+        size_t first = 0;
+        while (first <= str.size())
+        {
+            size_t second = str.find_first_of(delimiter, first);
+
+            if (first != second)
+                result.emplace_back(str.substr(first, second - first));
+
+            // No more left of delimiter split
+            if (second == std::string_view::npos)
+                break;
+
+            first = second + 1;
+        }
+
+        return result;
     }
 
 }
@@ -851,6 +873,79 @@ namespace Nano::Memory
 
     private:
         std::array<char, N + 1> m_Content = {};
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Buffer
+    ////////////////////////////////////////////////////////////////////////////////////
+    class Buffer // Note: Just a view into a buffer, does not own or destroy it, this must be done manually through the methods.
+    {
+    public:
+        void* Data;
+        size_t Size;
+
+    public:
+        // Constructors & Destructor
+        constexpr Buffer() noexcept(true)
+            : Data(nullptr), Size(0ull) {}
+        constexpr Buffer(const void* data, size_t size) noexcept(true)
+            : Data(const_cast<void*>(data)), Size(size) {}
+        constexpr ~Buffer() noexcept(true) = default;
+
+        // Methods
+        void Allocate(size_t size);
+        void Release();
+        void ZeroInitialize();
+
+        [[nodiscard]] constexpr uint8_t* ReadBytes(size_t size, size_t offset) const noexcept(true)
+        {
+            NANO_ASSERT((offset + size <= Size), "Offset + size exceeds buffer size.");
+            return static_cast<uint8_t*>(Data) + offset;
+        }
+        void Write(const void* data, size_t size);
+        void Write(const void* data, size_t size, size_t offset);
+
+        template<typename T>
+        [[nodiscard]] T& Read() noexcept(true)
+        {
+            return *static_cast<T*>(static_cast<uint32_t*>(Data));
+        }
+
+        template<typename T>
+        [[nodiscard]] T& Read(size_t offset) noexcept(true)
+        {
+            return *static_cast<T*>(static_cast<uint32_t*>(Data + offset));
+        }
+
+        template<typename T>
+        [[nodiscard]] const T& Read() const noexcept(true)
+        {
+            return *static_cast<const T*>(static_cast<uint32_t*>(Data));
+        }
+
+        template<typename T>
+        [[nodiscard]] const T& Read(size_t offset) const noexcept(true)
+        {
+            return *static_cast<const T*>(static_cast<uint32_t*>(Data + offset));
+        }
+
+        template<typename T>
+        [[nodiscard]] constexpr T* As() const noexcept(true)
+        {
+            return static_cast<T*>(Data);
+        }
+
+        // Operators
+        [[nodiscard]] inline constexpr operator bool() const noexcept(true) { static_cast<bool>(Data); }
+        [[nodiscard]] inline constexpr uint8_t& operator [] (size_t index) noexcept(true) { return static_cast<uint8_t*>(Data)[index]; }
+        [[nodiscard]] inline constexpr uint8_t operator [] (size_t index) const noexcept(true) { return static_cast<uint8_t*>(Data)[index]; }
+        
+        // Getters
+        [[nodiscard]] inline constexpr size_t GetSize() const { return Size; }
+
+        // Static methods
+        [[nodiscard]] static Buffer Copy(const Buffer& other);
+        [[nodiscard]] static Buffer Copy(const void* data, size_t size);
     };
 
 #if defined(NANO_EXPERIMENTAL)
@@ -1451,6 +1546,66 @@ namespace Nano::Internal::Memory
     {
         std::shared_lock<std::shared_mutex> lock(s_LiveReferenceMutex);
         return s_LiveReferences.contains(instance);
+    }
+
+}
+
+namespace Nano::Memory
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Methods
+    ////////////////////////////////////////////////////////////////////////////////////
+    void Buffer::Allocate(size_t size)
+    {
+        if (size == 0)
+            return;
+
+        Data = new uint8_t[size];
+        Size = size;
+    }
+
+    void Buffer::Release()
+    {
+        delete[] static_cast<uint8_t*>(Data);
+        Data = nullptr;
+        Size = 0;
+    }
+
+    void Buffer::ZeroInitialize()
+    {
+        memset(Data, 0, Size);
+    }
+
+    void Buffer::Write(const void* data, size_t size)
+    {
+        NANO_ASSERT(size <= Size, "Size exceeds buffer size.");
+        memcpy(static_cast<uint8_t*>(Data), data, size);
+    }
+
+    void Buffer::Write(const void* data, size_t size, size_t offset)
+    {
+        NANO_ASSERT(offset + size <= Size, "Size + offset exceeds buffer size!");
+        memcpy(static_cast<uint8_t*>(Data) + offset, data, size);
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // Static methods
+    ////////////////////////////////////////////////////////////////////////////////////
+    Buffer Buffer::Copy(const Buffer& other)
+    {
+        Buffer buffer;
+        buffer.Allocate(other.Size);
+        memcpy(buffer.Data, other.Data, other.Size);
+        return buffer;
+    }
+
+    Buffer Buffer::Copy(const void* data, size_t size)
+    {
+        Buffer buffer;
+        buffer.Allocate(size);
+        memcpy(buffer.Data, data, size);
+        return buffer;
     }
 
 }
