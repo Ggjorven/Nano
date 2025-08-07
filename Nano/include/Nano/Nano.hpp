@@ -451,7 +451,7 @@ namespace Nano::Text
         return std::format(fmt, std::forward<Args>(args)...);
     }
 
-    [[nodiscard]] std::vector<std::string> SplitString(std::string_view str, char delimiter)
+    [[nodiscard]] inline std::vector<std::string> SplitString(std::string_view str, std::string_view delimiter)
     {
         std::vector<std::string> result;
 
@@ -471,6 +471,11 @@ namespace Nano::Text
         }
 
         return result;
+    }
+
+    [[nodiscard]] inline std::vector<std::string> SplitString(std::string_view str, char delimiter)
+    {
+        return SplitString(str, std::string(1, delimiter));
     }
 
 }
