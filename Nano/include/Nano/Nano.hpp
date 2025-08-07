@@ -897,9 +897,9 @@ namespace Nano::Memory
         void Release();
         void ZeroInitialize();
 
-        [[nodiscard]] constexpr uint8_t* ReadBytes(size_t size, size_t offset) const noexcept(true)
+        [[nodiscard]] constexpr uint8_t* ReadBytes(size_t offset) const noexcept(true)
         {
-            NANO_ASSERT((offset + size <= Size), "Offset + size exceeds buffer size.");
+            NANO_ASSERT((offset <= Size), "Offset exceeds buffer size.");
             return static_cast<uint8_t*>(Data) + offset;
         }
         void Write(const void* data, size_t size);
@@ -936,7 +936,7 @@ namespace Nano::Memory
         }
 
         // Operators
-        [[nodiscard]] inline constexpr operator bool() const noexcept(true) { static_cast<bool>(Data); }
+        [[nodiscard]] inline constexpr operator bool() const noexcept(true) { return static_cast<bool>(Data); }
         [[nodiscard]] inline constexpr uint8_t& operator [] (size_t index) noexcept(true) { return static_cast<uint8_t*>(Data)[index]; }
         [[nodiscard]] inline constexpr uint8_t operator [] (size_t index) const noexcept(true) { return static_cast<uint8_t*>(Data)[index]; }
         
