@@ -80,7 +80,7 @@
 #endif
 
 #if defined(__ANDROID__) || defined(__linux__) || defined(__APPLE__)
-    #define NANO_PLATFORM_UNIX
+    #define NANO_PLATFORM_POSIX
 #endif
 
 #if defined(__APPLE__)
