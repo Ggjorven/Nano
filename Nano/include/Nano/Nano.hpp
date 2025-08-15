@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cstddef>
+#include <cassert>
 #include <exception>
 
 #include <any>
@@ -53,6 +54,8 @@
     #define NANO_COMPILER_CLANG
 #elif defined(__GNUC__)
     #define NANO_COMPILER_GCC
+#else
+    #define NANO_COMPILER_UNKNOWN
 #endif
 
 // Platform
@@ -84,6 +87,13 @@
     #define NANO_PLATFORM_APPLE
 #endif
 
+// Configuration
+#if !defined(NDEBUG) && !defined(NANO_CONFIG_DEBUG)
+    #define NANO_CONFIG_DEBUG
+#elif !defined(NANO_CONFIG_DEBUG) && !defined(NANO_CONFIG_RELEASE)
+    #define NANO_CONFIG_RELEASE
+#endif
+
 // Cpp standard
 #define NANO_CPPSTD_UNKOWN 0
 #define NANO_CPPSTD_11 11
@@ -111,7 +121,7 @@
         #define NANO_CPPSTD NANO_CPPSTD_UNKOWN
     #endif
 #else
-#if __cplusplus >= 202602L
+    #if __cplusplus >= 202602L
         #define NANO_CPPSTD NANO_CPPSTD_26
     #elif __cplusplus >= 202302L
         #define NANO_CPPSTD NANO_CPPSTD_23
@@ -144,8 +154,11 @@
     #define _CRT_SECURE_NO_WARNINGS
 #endif
 
+// Alias for Debug-break
+#define NANO_ABORT() NANO_DEBUG_BREAK()
+
 // Debug
-#if defined(NANO_DEBUG)
+#if defined(NANO_CONFIG_DEBUG)
     #define NANO_DEBUG_EXPECTED
 
     #if !defined(NANO_ASSERT)
@@ -231,6 +244,12 @@ namespace Nano::CompileInformation
             iOS,
         };
 
+        enum class Configuration : uint8_t
+        {
+            Debug = 0,
+            Release
+        };
+
         enum class CppStd : uint8_t
         {
             Unknown = NANO_CPPSTD_UNKOWN,
@@ -254,7 +273,7 @@ namespace Nano::CompileInformation
         inline constexpr const Structs::Compiler Compiler = Structs::Compiler::GCC;
     #elif defined(NANO_COMPILER_CLANG)
         inline constexpr const Structs::Compiler Compiler = Structs::Compiler::Clang;
-    #else
+    #elif defined(NANO_COMPILER_UNKNOWN)
         inline constexpr const Structs::Compiler Compiler = Structs::Compiler::Unknown;
     #endif
 
@@ -268,6 +287,14 @@ namespace Nano::CompileInformation
         inline constexpr const Structs::Platform Platform = Structs::Platform::Android;
     #elif defined(NANO_PLATFORM_IOS)
         inline constexpr const Structs::Platform Platform = Structs::Platform::iOS;
+    #else   
+        inline constexpr const Structs::Platform Platform = Structs::Platform::Unknown;
+    #endif
+
+    #if defined(NANO_CONFIG_DEBUG)
+        inline constexpr const Structs::Configuration Configuration = Structs::Configuration::Debug;
+    #else
+        inline constexpr const Structs::Configuration Configuration = Structs::Configuration::Release;
     #endif
 
     inline constexpr const Structs::CppStd CppStd = static_cast<Structs::CppStd>(NANO_CPPSTD);

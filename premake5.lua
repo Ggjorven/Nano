@@ -1,33 +1,4 @@
 ------------------------------------------------------------------------------
--- Utilities
-------------------------------------------------------------------------------
-local function GetIOResult(cmd)
-	local handle = io.popen(cmd) -- Open a console and execute the command.
-	local output = handle:read("*a") -- Read the output.
-	handle:close() -- Close the handle.
-
-	return output:match("^%s*(.-)%s*$") -- Trim any trailing whitespace (such as newlines)
-end
-
-function GetOS()
-	local osName = os.getenv("OS")
-
-	if osName == "Windows_NT" then
-		return "windows"
-	else
-		local uname = io.popen("uname"):read("*l")
-		if uname == "Linux" then
-			return "linux"
-		elseif uname == "Darwin" then
-			return "macosx"
-		end
-	end
-
-	return "unknown-os"
-end
-------------------------------------------------------------------------------
-
-------------------------------------------------------------------------------
 -- Bug fixes
 ------------------------------------------------------------------------------
 -- Visual Studio: Bugfix for C++ Modules (same module file name per project)
@@ -50,23 +21,10 @@ end)
 ------------------------------------------------------------------------------
 
 ------------------------------------------------------------------------------
--- Dependencies
-------------------------------------------------------------------------------
--- Nothing
-
-------------------------------------------------------------------------------
-
-------------------------------------------------------------------------------
--- Platform specific
-------------------------------------------------------------------------------
--- Nothing
-
-------------------------------------------------------------------------------
-
-------------------------------------------------------------------------------
 -- Solution
 ------------------------------------------------------------------------------
-outputdir = "%{cfg.buildcfg}-%{cfg.system}"
+local OutputDir = "%{cfg.buildcfg}-%{cfg.system}"
+local MacOSVersion = "14.5"
 
 workspace "Nano"
 	architecture "x86_64"
