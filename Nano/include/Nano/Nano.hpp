@@ -802,6 +802,14 @@ namespace Nano::Memory
         SparseSet() = default;
         ~SparseSet() noexcept(std::is_nothrow_destructible_v<T>) = default;
 
+        // Copy functions
+        SparseSet(const SparseSet&) = delete;
+        SparseSet& operator = (const SparseSet&) = delete;
+
+        // Move functions
+        SparseSet(SparseSet&&) = default;
+        SparseSet& operator = (SparseSet&&) = default;
+
         // Methods
         void Add(ID id, const T& value) requires(std::is_copy_constructible_v<T>)
         {
