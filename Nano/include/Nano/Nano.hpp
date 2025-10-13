@@ -3239,6 +3239,14 @@ namespace Nano::Internal::ECS
         Storage() = default;
         ~Storage() = default;
 
+        // Copy functions
+        Storage(const Storage&) = delete;
+        Storage& operator = (const Storage&) = delete;
+
+        // Move functions 
+        Storage(Storage&&) = default;
+        Storage& operator = (Storage&&) = default;
+
         // Methods
         template<typename TComponent>
         void AddComponent(ID id, const TComponent& component) requires(Nano::Types::TupleContains<TComponent, TypesTuple> && std::is_copy_constructible_v<TComponent>)
@@ -3487,6 +3495,14 @@ namespace Nano::ECS
         // Constructor & Destructor
         Registry() = default;
         ~Registry() = default;
+
+        // Copy functions
+        Registry(const Registry&) = delete;
+        Registry& operator = (const Registry&) = delete;
+
+        // Move functions 
+        Registry(Registry&&) = default;
+        Registry& operator = (Registry&&) = default;
 
         // Methods
         template<typename TComponent>
