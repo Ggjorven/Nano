@@ -553,7 +553,7 @@ namespace Nano
     ////////////////////////////////////////////////////////////////////////////////////
     // Hash
     ////////////////////////////////////////////////////////////////////////////////////
-    class Hash final : public Traits::NoConstruct
+    class Hash : public Traits::NoConstruct
     {
     public:
         // String hashing
@@ -706,7 +706,7 @@ namespace Nano::Memory
         , bool Destroyable = false
 #endif
     >
-    class DeferredConstruct final //: public Traits::NoCopy, public Traits::NoMove
+    class DeferredConstruct //: public Traits::NoCopy, public Traits::NoMove
     {
     public:
         using ValueType = T;
@@ -793,7 +793,7 @@ namespace Nano::Memory
     // SparseSet<T>
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename T, typename ID = uint64_t> requires(std::is_integral_v<ID>)
-    class SparseSet final : public Traits::NoCopy
+    class SparseSet : public Traits::NoCopy
     {
     public:
         static constexpr ID InvalidID = std::numeric_limits<ID>::max();
@@ -890,7 +890,7 @@ namespace Nano::Memory
     // StaticString<N>
     ////////////////////////////////////////////////////////////////////////////////////
     template<size_t N>
-    struct StaticString final
+    struct StaticString
     {
     public:
         // Constructor & Destructor
@@ -985,7 +985,7 @@ namespace Nano::Memory
     // FixedStack
     ////////////////////////////////////////////////////////////////////////////////////
     template<size_t Size = 1024, bool TrackDestructors = true>
-    class FixedStack final // Note: The stack is current on the stack, maybe should be on the heap.
+    class FixedStack // Note: The stack is current on the stack, maybe should be on the heap.
     {
     public:
         // Constructor & Destructor
@@ -1069,7 +1069,7 @@ namespace Nano::Memory
     // ArenaAllocator
     ////////////////////////////////////////////////////////////////////////////////////
     template<size_t Size = 1 << 20, bool TrackDestructors = true>
-    class ArenaAllocator final // Note: Allocates in blocks
+    class ArenaAllocator // Note: Allocates in blocks
     {
     private:
         struct Block // Note: The capacity is the index + 1 times the templated Size
@@ -2384,7 +2384,7 @@ namespace Nano::Utils
     // ScopeExit
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename TFunc> requires(std::invocable<TFunc>)
-    class ScopeExit final : public Traits::NoCopy, public Traits::NoMove
+    class ScopeExit : public Traits::NoCopy, public Traits::NoMove
     {
     public:
         // Constructor & Destructor
@@ -2417,7 +2417,7 @@ namespace Nano::Functional
     ////////////////////////////////////////////////////////////////////////////////////
     // FunctionConversion
     ////////////////////////////////////////////////////////////////////////////////////
-    class Conversion final : public Traits::NoConstruct
+    class Conversion : public Traits::NoConstruct
     {
     public:
         // Converts a member function into a static-like function
@@ -2540,7 +2540,7 @@ namespace Nano::Time
     // Timer
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename TimePeriod = Period::Milliseconds, typename Representation = double> requires(Period::IsPeriod<TimePeriod>)
-    class Timer final // Note: Uses high resolution clock
+    class Timer // Note: Uses high resolution clock
     {
     public:
         // Constructor & Destructor
@@ -2619,7 +2619,7 @@ namespace Nano::Random
     ////////////////////////////////////////////////////////////////////////////////////
     // Random
     ////////////////////////////////////////////////////////////////////////////////////
-    class Random final : Traits::NoConstruct
+    class Random : Traits::NoConstruct
     {
     public:
         // Seeding
@@ -2681,7 +2681,7 @@ namespace Nano::Random
     ////////////////////////////////////////////////////////////////////////////////////
     // FastRandom
     ////////////////////////////////////////////////////////////////////////////////////
-    class FastRandom final : public Traits::NoConstruct
+    class FastRandom : public Traits::NoConstruct
     {
     public:
         // Seeding
@@ -2837,7 +2837,7 @@ namespace Nano::Errors
     // Expected<T, E>
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename T, typename E>
-    class Expected final : public Traits::NoCopy, public Traits::NoMove
+    class Expected : public Traits::NoCopy, public Traits::NoMove
     {
     public:
         using ValueType = T;
@@ -3021,7 +3021,7 @@ namespace Nano::Threading // TODO: Add concurrency in the future
     ////////////////////////////////////////////////////////////////////////////////////
     // ThreadPool
     ////////////////////////////////////////////////////////////////////////////////////
-    class ThreadPool final : public Traits::NoCopy
+    class ThreadPool : public Traits::NoCopy
     {
     public:
         // Constructor & Destructor
@@ -3139,7 +3139,7 @@ namespace Nano::Events
     // EventDispatcher
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename TEventVariant> requires requires { typename std::variant_size<TEventVariant>::type; }
-    class EventDispatcher final
+    class EventDispatcher
     {
     public:
         using SubscribeFn = std::function<void(TEventVariant& e)>;
@@ -3169,7 +3169,7 @@ namespace Nano::Events
     // EventHandler
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename TEventVariant> requires requires { typename std::variant_size<TEventVariant>::type; }
-    class EventHandler final
+    class EventHandler
     {
     public:
         // Constructor & Destructor
@@ -3203,7 +3203,7 @@ namespace Nano::Internal::ECS
     // Storage
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename ID, typename ...Components> requires(std::is_integral_v<ID>)
-    class Storage final
+    class Storage
     {
     public:
         using TypesTuple = std::tuple<Components...>;
@@ -3271,7 +3271,7 @@ namespace Nano::Internal::ECS
     // ComponentView
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename ID, typename ...Components>
-    class ComponentView final : public Nano::Traits::NoCopy
+    class ComponentView : public Nano::Traits::NoCopy
     {
     public:
         using SparseSetsTuple = std::tuple<std::add_lvalue_reference_t<Nano::Memory::SparseSet<Components, ID>>...>;
@@ -3530,7 +3530,7 @@ namespace Nano::ECS
     // Specialization for Components Tuple
     ////////////////////////////////////////////////////////////////////////////////////
     template<typename ID, typename... Components>
-    class Registry<ID, std::tuple<Components...>> final : public Registry<ID, Components...>
+    class Registry<ID, std::tuple<Components...>> : public Registry<ID, Components...>
     {
     public:
         using Registry<ID, Components...>::Registry;
