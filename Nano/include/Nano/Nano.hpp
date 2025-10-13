@@ -2646,10 +2646,22 @@ namespace Nano::Random
             return s_IntDist(s_RandomEngine);
         }
 
+        [[nodiscard]] inline static int64_t Int64(int64_t min = std::numeric_limits<int64_t>::min(), int64_t max = std::numeric_limits<int64_t>::max())
+        {
+            s_Int64Dist.param(typename decltype(s_Int64Dist)::param_type{ min, max });
+            return s_Int64Dist(s_RandomEngine);
+        }
+
         [[nodiscard]] inline static uint32_t UInt(uint32_t min = std::numeric_limits<uint32_t>::min(), uint32_t max = std::numeric_limits<uint32_t>::max())
         {
             s_UIntDist.param(typename decltype(s_UIntDist)::param_type{ min, max });
             return s_UIntDist(s_RandomEngine);
+        }
+
+        [[nodiscard]] inline static uint64_t UInt64(uint64_t min = std::numeric_limits<uint64_t>::min(), uint64_t max = std::numeric_limits<uint64_t>::max())
+        {
+            s_UInt64Dist.param(typename decltype(s_UInt64Dist)::param_type{ min, max });
+            return s_UInt64Dist(s_RandomEngine);
         }
 
         // Boolean
@@ -2667,14 +2679,18 @@ namespace Nano::Random
     private:
         static thread_local std::mt19937 s_RandomEngine;
         static thread_local std::uniform_int_distribution<int> s_IntDist;
+        static thread_local std::uniform_int_distribution<int64_t> s_Int64Dist;
         static thread_local std::uniform_int_distribution<unsigned int> s_UIntDist;
+        static thread_local std::uniform_int_distribution<uint64_t> s_UInt64Dist;
         static thread_local std::uniform_real_distribution<float> s_FloatDist;
         static thread_local std::uniform_real_distribution<double> s_DoubleDist;
     };
 
     inline thread_local std::mt19937								Random::s_RandomEngine(static_cast<uint32_t>(Time::SinceEpoch<Time::Period::Milliseconds, uint64_t>()));
     inline thread_local std::uniform_int_distribution<int>		    Random::s_IntDist;
+    inline thread_local std::uniform_int_distribution<int64_t>		Random::s_Int64Dist;
     inline thread_local std::uniform_int_distribution<unsigned int>	Random::s_UIntDist;
+    inline thread_local std::uniform_int_distribution<uint64_t>	    Random::s_UInt64Dist;
     inline thread_local std::uniform_real_distribution<float>		Random::s_FloatDist(0.0f, 1.0f);
     inline thread_local std::uniform_real_distribution<double>		Random::s_DoubleDist(0.0, 1.0);
 
@@ -2704,10 +2720,20 @@ namespace Nano::Random
         // Integer
         [[nodiscard]] inline static int32_t Int(int32_t min = std::numeric_limits<int32_t>::min(), int32_t max = std::numeric_limits<int32_t>::max())
         {
-            return min + static_cast<int32_t>(Next() % (static_cast<uint64_t>(max) - static_cast<uint64_t>(min) + 1));
+            return (Bool() ? 1 : -1) * (min + static_cast<int32_t>((Next() % (static_cast<uint64_t>(max) - static_cast<uint64_t>(min) + 1)) >> 33));
+        }
+
+        [[nodiscard]] inline static int64_t Int64(int64_t min = std::numeric_limits<int64_t>::min(), int64_t max = std::numeric_limits<int64_t>::max())
+        {
+            return (Bool() ? 1 : -1) * (min + static_cast<int64_t>((Next() % (static_cast<uint64_t>(max) - static_cast<uint64_t>(min) + 1)) >> 1));
         }
 
         [[nodiscard]] inline static uint32_t UInt(uint32_t min = std::numeric_limits<uint32_t>::min(), uint32_t max = std::numeric_limits<uint32_t>::max())
+        {
+            return min + (Next() % (static_cast<uint64_t>(max) - static_cast<uint64_t>(min) + 1));
+        }
+
+        [[nodiscard]] inline static uint64_t UInt64(uint64_t min = std::numeric_limits<uint64_t>::min(), uint64_t max = std::numeric_limits<uint64_t>::max())
         {
             return min + (Next() % (static_cast<uint64_t>(max) - static_cast<uint64_t>(min) + 1));
         }
