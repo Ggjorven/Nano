@@ -807,8 +807,8 @@ namespace Nano::Memory
         SparseSet& operator = (const SparseSet&) = delete;
 
         // Move functions
-        SparseSet(SparseSet&&) = default;
-        SparseSet& operator = (SparseSet&&) = default;
+        SparseSet(SparseSet&&) noexcept(std::is_nothrow_move_assignable_v<T>) = default;
+        SparseSet& operator = (SparseSet&&) noexcept(std::is_nothrow_move_assignable_v<T>) = default;
 
         // Methods
         void Add(ID id, const T& value) requires(std::is_copy_constructible_v<T>)
@@ -3252,8 +3252,8 @@ namespace Nano::Internal::ECS
         Storage& operator = (const Storage&) = delete;
 
         // Move functions 
-        Storage(Storage&&) = default;
-        Storage& operator = (Storage&&) = default;
+        Storage(Storage&&) noexcept(std::is_nothrow_move_assignable_v<StorageTuple>) = default;
+        Storage& operator = (Storage&&) noexcept(std::is_nothrow_move_assignable_v<StorageTuple>) = default;
 
         // Methods
         template<typename TComponent>
@@ -3499,6 +3499,7 @@ namespace Nano::ECS
     {
     public:
         using TypesTuple = std::tuple<Components...>;
+        using StorageType = Internal::ECS::Storage<ID, Components...>;
     public:
         // Constructor & Destructor
         Registry() = default;
@@ -3509,8 +3510,8 @@ namespace Nano::ECS
         Registry& operator = (const Registry&) = delete;
 
         // Move functions 
-        Registry(Registry&&) = default;
-        Registry& operator = (Registry&&) = default;
+        Registry(Registry&&) noexcept(std::is_nothrow_move_assignable_v<StorageType>) = default;
+        Registry& operator = (Registry&&) noexcept(std::is_nothrow_move_assignable_v<StorageType>) = default;
 
         // Methods
         template<typename TComponent>
@@ -3573,7 +3574,7 @@ namespace Nano::ECS
         // Iterators
 
     private:
-        Internal::ECS::Storage<ID, Components...> m_Storage;
+        StorageType m_Storage;
     };
 
     ////////////////////////////////////////////////////////////////////////////////////
