@@ -807,8 +807,15 @@ namespace Nano::Memory
         SparseSet& operator = (const SparseSet&) = delete;
 
         // Move functions
-        SparseSet(SparseSet&&) noexcept(std::is_nothrow_move_assignable_v<T>) = default;
-        SparseSet& operator = (SparseSet&&) noexcept(std::is_nothrow_move_assignable_v<T>) = default;
+        SparseSet(SparseSet&& other) noexcept(std::is_nothrow_move_assignable_v<T>)
+            : m_Sparse(std::move(other.m_Sparse)), m_IDs(std::move(other.m_IDs)), m_Values(std::move(other.m_Values)) {}
+        SparseSet& operator = (SparseSet&& other) noexcept(std::is_nothrow_move_assignable_v<T>)
+        {
+            m_Sparse = std::move(other.m_Sparse);
+            m_IDs = std::move(other.m_IDs);
+            m_Values = std::move(other.m_Values);
+            return *this;
+        }
 
         // Methods
         void Add(ID id, const T& value) requires(std::is_copy_constructible_v<T>)
@@ -3252,8 +3259,13 @@ namespace Nano::Internal::ECS
         Storage& operator = (const Storage&) = delete;
 
         // Move functions 
-        Storage(Storage&&) noexcept(std::is_nothrow_move_assignable_v<StorageTuple>) = default;
-        Storage& operator = (Storage&&) noexcept(std::is_nothrow_move_assignable_v<StorageTuple>) = default;
+        Storage(Storage&& other) noexcept(std::is_nothrow_move_assignable_v<StorageTuple>)
+            : m_Components(std::move(other.m_Components)) {}
+        Storage& operator = (Storage&& other) noexcept(std::is_nothrow_move_assignable_v<StorageTuple>)
+        {
+            m_Components = std::move(other.m_Components);
+            return *this;
+        }
 
         // Methods
         template<typename TComponent>
@@ -3510,8 +3522,13 @@ namespace Nano::ECS
         Registry& operator = (const Registry&) = delete;
 
         // Move functions 
-        Registry(Registry&&) noexcept(std::is_nothrow_move_assignable_v<StorageType>) = default;
-        Registry& operator = (Registry&&) noexcept(std::is_nothrow_move_assignable_v<StorageType>) = default;
+        Registry(Registry&& other) noexcept(std::is_nothrow_move_assignable_v<StorageType>)
+            : m_Storage(std::move(other.m_Storage)) {}
+        Registry& operator = (Registry&& other) noexcept(std::is_nothrow_move_assignable_v<StorageType>)
+        {
+            m_Storage = std::move(other.m_Storage);
+            return *this;
+        }
 
         // Methods
         template<typename TComponent>
