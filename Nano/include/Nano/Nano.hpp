@@ -711,8 +711,13 @@ namespace Nano::Memory
     public:
         using ValueType = T;
     public:
-        // Constructor & Destructor
+        // Constructors & Destructor
         DeferredConstruct() noexcept(true) = default;
+        template<typename ...Args>
+        inline DeferredConstruct(Args&& ...args) noexcept(std::is_nothrow_constructible_v<T, Args...>)
+        {
+            Construct<Args...>(std::forward<Args>(args)...);
+        }
         inline ~DeferredConstruct() noexcept(std::is_nothrow_destructible_v<T>)
         {
             if constexpr (!std::is_trivially_destructible_v<T>)
