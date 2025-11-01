@@ -3219,13 +3219,13 @@ namespace Nano::Events
     {
     public:
         // Constructor & Destructor
-        EventHandler(TEventVariant& e)
+        constexpr EventHandler(TEventVariant& e)
             : m_Event(e) {}
-        ~EventHandler() = default;
+        constexpr ~EventHandler() = default;
 
         // Methods
         template<typename TEvent, typename TFunc>
-        void Handle(TFunc&& func)
+        constexpr void Handle(TFunc&& func)
         {
             if (std::holds_alternative<TEvent>(m_Event))
                 func(std::get<TEvent>(m_Event));
